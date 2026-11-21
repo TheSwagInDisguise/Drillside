@@ -112,6 +112,8 @@ enum Game {
     static func expandIsland(profile: Profile) -> Outcome {
         let n = profile.islandSize
         guard n < Economy.maxIsland else { return Outcome(message: "Maximum size reached", ok: false) }
+        let needLevel = Economy.expandLevel(to: n + 1)
+        guard profile.level >= needLevel else { return Outcome(message: "Reach level \(needLevel) to expand to \(n + 1)×\(n + 1)", ok: false) }
         let price = Economy.expandPrice(from: n)
         guard profile.shells >= price else { return Outcome(message: "Need 🐚 \(price - profile.shells) more to expand", ok: false) }
         profile.shells -= price

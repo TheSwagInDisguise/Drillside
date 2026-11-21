@@ -32,6 +32,13 @@ final class IslandEngine {
     var placing: PropType?
     var selected: UUID?
 
+    // Camera
+    var zoom: CGFloat = 1
+    var pan: CGSize = .zero
+    var panStart: CGSize = .zero
+    var panning = false
+    var pinching = false
+
     // Edit interaction
     var hover: GridCell?
     var dragID: UUID?
@@ -60,6 +67,7 @@ final class IslandEngine {
 
     private struct Critter {
         var r: CGFloat, c: CGFloat, tr: CGFloat, tc: CGFloat, wait: CGFloat, face: CGFloat
+        var moving = false
     }
     private var critters: [CompanionType: Critter] = [:]
 
@@ -81,13 +89,28 @@ final class IslandEngine {
     func layout(size: CGSize, topInset: CGFloat, bottomInset: CGFloat) {
         self.size = size
         let n = CGFloat(gridSize)
-        tileW = min(60, (size.width - 34) / n)
+        let baseW = min(60, (size.width - 34) / n)
+        let baseH = baseW / 2
+        let islandH = n * baseH + baseW * 0.45
+        let avail = size.height - topInset - bottomInset
+        let top1 = topInset + 50 + max(0, (avail - 50 - islandH) / 2)
+        let centerY = top1 + n * baseH / 2
+        tileW = baseW * zoom
         tileH = tileW / 2
         depth = tileW * 0.45
-        originX = size.width / 2
-        let islandH = n * tileH + depth
-        let avail = size.height - topInset - bottomInset
-        originY = topInset + 50 + max(0, (avail - 50 - islandH) / 2)
+        let maxX = n * tileW / 2
+        let maxY = n * tileH / 2 + 120
+        pan.width = min(maxX, max(-maxX, pan.width))
+        pan.height = min(maxY, max(-maxY, pan.height))
+        originX = size.width / 2 + pan.width
+        originY = centerY - n * tileH / 2 + pan.height
+    }
+
+    var isCameraMoved: Bool { zoom > 1.01 || abs(pan.width) > 1 || abs(pan.height) > 1 }
+
+    func resetCamera() {
+        zoom = 1
+        pan = .zero
     }
 
     var scale: CGFloat { tileW / 56 }
@@ -151,7 +174,7 @@ final class IslandEngine {
         updateCritters(dt)
     }
 
-    private func blocked() -> Set<Int> { Set(props.map { $0.row * 100 + $0.col }) }
+    private func blocked() -> Set<Int> { Set(props.filter { !$0.type.isWalkable }.map { $0.row * 100 + $0.col }) }
 
     private func bfs(from start: GridCell, goals: Set<Int>) -> [CGPoint]? {
         let n = gridSize
@@ -189,9 +212,13 @@ final class IslandEngine {
 
     private func goTo(prop p: PropSnapshot, user: Bool = false) {
         var goals = Set<Int>()
-        for (dr, dc) in [(1, 0), (-1, 0), (0, 1), (0, -1)] {
-            let g = GridCell(row: p.row + dr, col: p.col + dc)
-            if inGrid(g) && prop(at: g) == nil { goals.insert(g.row * 100 + g.col) }
+        if p.type.isWalkable {
+            goals.insert(p.row * 100 + p.col)
+        } else {
+            for (dr, dc) in [(1, 0), (-1, 0), (0, 1), (0, -1)] {
+                let g = GridCell(row: p.row + dr, col: p.col + dc)
+                if inGrid(g), prop(at: g)?.type.isWalkable ?? true { goals.insert(g.row * 100 + g.col) }
+            }
         }
         guard let route = bfs(from: moleCell, goals: goals) else {
             if user { say("Can’t reach that 🤔") }
@@ -272,7 +299,7 @@ final class IslandEngine {
         }
         for _ in 0..<10 {
             let g = GridCell(row: Int.random(in: 0..<gridSize), col: Int.random(in: 0..<gridSize))
-            if prop(at: g) == nil {
+            if prop(at: g)?.type.isWalkable ?? true {
                 goTo(cell: g)
                 return
             }
@@ -283,7 +310,7 @@ final class IslandEngine {
     private func randomFreeCenter() -> (CGFloat, CGFloat) {
         for _ in 0..<12 {
             let g = GridCell(row: Int.random(in: 0..<gridSize), col: Int.random(in: 0..<gridSize))
-            if prop(at: g) == nil { return (CGFloat(g.row) + 0.5, CGFloat(g.col) + 0.5) }
+            if prop(at: g)?.type.isWalkable ?? true { return (CGFloat(g.row) + 0.5, CGFloat(g.col) + 0.5) }
         }
         return (CGFloat(gridSize) / 2, CGFloat(gridSize) / 2)
     }
@@ -300,6 +327,7 @@ final class IslandEngine {
             }
             o.r = min(limit, o.r)
             o.c = min(limit, o.c)
+            o.moving = o.wait <= 0
             if o.wait > 0 {
                 o.wait -= dt
                 if o.wait <= 0 {
@@ -399,10 +427,22 @@ final class IslandEngine {
                      ok ? Color(hex: 0x50DC78, opacity: 0.45) : Color(hex: 0xF05046, opacity: 0.45))
         }
 
+        // Flat terrain layer
+        for p in props.filter({ $0.type.isFlat }).sorted(by: { $0.row + $0.col < $1.row + $1.col }) {
+            if dragging && p.id == dragID { continue }
+            let pt = project(CGFloat(p.row) + 0.5, CGFloat(p.col) + 0.5)
+            if editing && selected == p.id {
+                ctx.stroke(Path(ellipseIn: CGRect(x: pt.x - tileW * 0.42, y: pt.y - tileH * 0.42, width: tileW * 0.84, height: tileH * 0.84)),
+                           with: .color(Color(hex: 0xFFC83C, opacity: Double(0.7 + 0.3 * sin(t * 6)))), lineWidth: 2.5)
+            }
+            PropArt.draw(p.type, ctx, pt.x, pt.y, s, t, night: nt)
+        }
+
         // Entities sorted by depth
         var entities: [(CGFloat, (GraphicsContext) -> Void)] = []
         let tt = t
         for p in props {
+            if p.type.isFlat { continue }
             if dragging && p.id == dragID { continue }
             let pt = project(CGFloat(p.row) + 0.5, CGFloat(p.col) + 0.5)
             let isSel = editing && selected == p.id
@@ -417,9 +457,14 @@ final class IslandEngine {
         }
         for type in companions {
             guard let o = critters[type] else { continue }
-            let pt = project(o.r, o.c)
+            let base = project(o.r, o.c)
+            let hop: CGFloat = (type.hops && o.moving) ? abs(sin(t * 9)) * 4 * s : 0
+            let pt = CGPoint(x: base.x, y: base.y - hop)
             let f = o.face
-            entities.append((o.r + o.c, { g in CompanionArt.draw(type, g, pt.x, pt.y, s, tt, face: f) }))
+            entities.append((o.r + o.c, { g in
+                if hop > 0 { g.groundShadow(base.x, base.y, 5 * s) }
+                CompanionArt.draw(type, g, pt.x, pt.y, s, tt, face: f)
+            }))
         }
         let posR = lie?.y ?? mR, posC = lie?.x ?? mC
         let mp = project(posR, posC)
@@ -460,6 +505,19 @@ final class IslandEngine {
                 glow(P(pt.x + L.dx * s, pt.y + L.dy * s), L.radius * s * flicker, L.color, Double(0.55 * nt))
             }
             glow(P(mp.x, moleY - 31 * s - bob - jumpH), 26 * s, Color(hex: 0xFFF5C8), Double(0.45 * nt))
+            for p in props where p.type == .lighthouse {
+                let pt = project(CGFloat(p.row) + 0.5, CGFloat(p.col) + 0.5)
+                let lamp = P(pt.x, pt.y - 57 * s)
+                let a = t * 0.8
+                let len: CGFloat = 320 * s
+                var beam = Path()
+                beam.move(to: lamp)
+                beam.addLine(to: P(lamp.x + cos(a - 0.09) * len, lamp.y + sin(a - 0.09) * len * 0.5))
+                beam.addLine(to: P(lamp.x + cos(a + 0.09) * len, lamp.y + sin(a + 0.09) * len * 0.5))
+                beam.closeSubpath()
+                let grad = Gradient(colors: [Color(hex: 0xFFF6C8, opacity: Double(0.35 * nt)), Color(hex: 0xFFF6C8, opacity: 0)])
+                light.fill(beam, with: .radialGradient(grad, center: lamp, startRadius: 0, endRadius: len))
+            }
         }
 
         // Speech bubble

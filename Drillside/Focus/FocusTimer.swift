@@ -44,6 +44,8 @@ final class FocusTimer: Identifiable {
         self.pausedRemaining = TimeInterval(work * 60)
     }
 
+    var phaseEndDate: Date { phaseEnd }
+
     var phaseLength: TimeInterval { TimeInterval((phase == .work ? workMinutes : breakMinutes) * 60) }
 
     var remaining: TimeInterval {

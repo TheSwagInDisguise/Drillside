@@ -101,7 +101,24 @@ final class EconomyTests: XCTestCase {
 
     func testExpandPrices() {
         XCTAssertEqual(Economy.expandPrice(from: 6), 150)
-        XCTAssertEqual(Economy.expandPrice(from: 8), 350)
+        XCTAssertEqual(Economy.expandPrice(from: 8), 450)
+        XCTAssertEqual(Economy.expandPrice(from: 15), 2445)
+        XCTAssertEqual(Economy.expandLevel(to: 7), 2)
+        XCTAssertEqual(Economy.expandLevel(to: 16), 11)
+        XCTAssertEqual(Economy.maxIsland, 16)
+    }
+
+    func testCatalogIsConsistent() {
+        XCTAssertGreaterThanOrEqual(PropType.allCases.count, 35)
+        XCTAssertEqual(Set(PropType.allCases.map(\.name)).count, PropType.allCases.count, "names must be unique")
+        for p in PropType.allCases {
+            XCTAssertGreaterThan(p.price, 0)
+            XCTAssertGreaterThanOrEqual(p.unlockLevel, 1)
+            if p.isWalkable { XCTAssertTrue(p.isFlat) }
+        }
+        XCTAssertFalse(PropType.pond.isWalkable)
+        XCTAssertTrue(PropType.path.isWalkable)
+        XCTAssertEqual(CompanionType.allCases.count, 6)
     }
 }
 

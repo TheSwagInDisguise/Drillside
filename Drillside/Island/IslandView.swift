@@ -18,6 +18,8 @@ struct IslandView: View {
     @State private var selected: UUID?
     @State private var showPicker = false
     @State private var showReset = false
+    @State private var baseZoom: CGFloat = 1
+    @State private var cameraMoved = false
 
     private var today: String { Day.today }
 
@@ -79,6 +81,18 @@ struct IslandView: View {
                 .onChanged(dragChanged)
                 .onEnded(dragEnded)
         )
+        .simultaneousGesture(
+            MagnifyGesture()
+                .onChanged { v in
+                    engine.pinching = true
+                    engine.zoom = min(3, max(1, baseZoom * v.magnification))
+                }
+                .onEnded { _ in
+                    baseZoom = engine.zoom
+                    engine.pinching = false
+                    cameraMoved = engine.isCameraMoved
+                }
+        )
         .accessibilityLabel("Your island. Bitsy the mole is wandering between your decorations.")
     }
 
@@ -86,27 +100,39 @@ struct IslandView: View {
         let e = engine
         if e.downPoint == nil {
             e.downPoint = v.startLocation
+            e.panStart = e.pan
+            e.panning = false
+            e.dragMoved = false
             let cell = e.cell(at: v.startLocation)
             e.hover = cell
-            guard editing else { return }
-            if let type = placing {
-                let out = Game.place(type, row: cell.row, col: cell.col, profile: profile, props: placed, context: context)
-                if out.ok {
-                    e.layoutChanged()
-                    if profile.inventoryCount(type) == 0 { placing = nil }
-                } else if let m = out.message { toasts.show(m) }
-                return
-            }
-            if let p = e.prop(at: cell), e.inGrid(cell) {
-                e.dragID = p.id
-                e.dragMoved = false
-                selected = p.id
+            if editing {
+                if let type = placing {
+                    let out = Game.place(type, row: cell.row, col: cell.col, profile: profile, props: placed, context: context)
+                    if out.ok {
+                        e.layoutChanged()
+                        if profile.inventoryCount(type) == 0 { placing = nil }
+                    } else if !e.inGrid(cell) {
+                        e.panning = true
+                    } else if let m = out.message {
+                        toasts.show(m)
+                    }
+                } else if e.inGrid(cell), let p = e.prop(at: cell) {
+                    e.dragID = p.id
+                    selected = p.id
+                } else {
+                    selected = nil
+                    e.panning = true
+                }
             } else {
-                selected = nil
+                e.panning = true
             }
         }
+        if e.pinching { return }
         e.hover = e.cell(at: v.location)
         if hypot(v.translation.width, v.translation.height) > 6 { e.dragMoved = true }
+        if e.panning && e.dragMoved {
+            e.pan = CGSize(width: e.panStart.width + v.translation.width, height: e.panStart.height + v.translation.height)
+        }
     }
 
     private func dragEnded(_ v: DragGesture.Value) {
@@ -115,8 +141,11 @@ struct IslandView: View {
             e.downPoint = nil
             e.dragID = nil
             e.dragMoved = false
+            e.panning = false
+            cameraMoved = e.isCameraMoved
         }
         let moved = hypot(v.translation.width, v.translation.height) > 6
+        if e.pinching { return }
         if editing {
             if let id = e.dragID, moved, let prop = placed.first(where: { $0.id == id }) {
                 let cell = e.cell(at: v.location)
@@ -132,6 +161,12 @@ struct IslandView: View {
             return
         }
         if !moved { e.tap(at: v.location) }
+    }
+
+    private func recenter() {
+        engine.resetCamera()
+        baseZoom = 1
+        cameraMoved = false
     }
 
     // MARK: HUD
@@ -190,14 +225,26 @@ struct IslandView: View {
             }
             .fixedSize(horizontal: false, vertical: true)
 
-            HStack(spacing: 10) {
-                Text("✓ \(todayDone)/\(todayDue) today")
-                Text("⏱ \(todayFocus) min")
-                Text("🔥 \(logStreak)-day log")
+            HStack {
+                HStack(spacing: 10) {
+                    Text("✓ \(todayDone)/\(todayDue) today")
+                    Text("⏱ \(todayFocus) min")
+                    Text("🔥 \(logStreak)-day log")
+                }
+                .font(.system(size: 12.5, weight: .bold, design: .rounded))
+                .padding(.horizontal, 11).padding(.vertical, 6)
+                .glass(night: profile.isNight, radius: 12)
+                Spacer()
+                if cameraMoved {
+                    Button(action: recenter) {
+                        Label("Recenter", systemImage: "scope")
+                            .font(.system(size: 12.5, weight: .bold, design: .rounded))
+                            .padding(.horizontal, 10).padding(.vertical, 6)
+                    }
+                    .glass(night: profile.isNight, radius: 12)
+                    .transition(.opacity)
+                }
             }
-            .font(.system(size: 12.5, weight: .bold, design: .rounded))
-            .padding(.horizontal, 11).padding(.vertical, 6)
-            .glass(night: profile.isNight, radius: 12)
         }
     }
 
@@ -251,7 +298,7 @@ struct IslandView: View {
             HStack(spacing: 8) {
                 VStack(alignment: .leading, spacing: 1) {
                     Text("Edit Island").font(.system(size: 15, weight: .heavy, design: .rounded))
-                    Text(placing.map { "Tap an empty tile to place \($0.name)" } ?? "Drag props to move · tap inventory to place")
+                    Text(placing.map { "Tap an empty tile to place \($0.name)" } ?? "Drag props to move · drag empty space to pan · pinch to zoom")
                         .font(.system(size: 11.5)).opacity(0.7)
                 }
                 Spacer()

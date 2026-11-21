@@ -31,6 +31,7 @@ struct RootView: View {
         }
         .environment(router)
         .environment(toasts)
+        .task { LiveActivityController.shared.endAll() }
     }
 
     private func scheme(for theme: String) -> ColorScheme? {

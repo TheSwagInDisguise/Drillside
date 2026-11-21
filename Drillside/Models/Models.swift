@@ -22,6 +22,8 @@ final class Profile {
     /// "system", "light" or "dark"
     var theme: String = "system"
     var isNight: Bool = false
+    /// Show running focus sessions in the Dynamic Island / Lock Screen.
+    var liveActivityOn: Bool = true
     var createdAt: Date = Date()
 
     init() {
@@ -41,6 +43,7 @@ final class Profile {
         reminderMinute = 0
         theme = "system"
         isNight = false
+        liveActivityOn = true
         createdAt = Date()
     }
 

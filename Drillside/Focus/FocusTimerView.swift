@@ -34,8 +34,12 @@ struct FocusTimerView: View {
         .onReceive(ticker) { date in
             let before = timer.earnedMinutes
             let crossed = timer.tick(date)
-            if timer.earnedMinutes > before { bump += 1 }
+            if timer.earnedMinutes > before {
+                bump += 1
+                LiveActivityController.shared.update(timer)
+            }
             if crossed && !timer.finished {
+                LiveActivityController.shared.update(timer)
                 toasts.show(timer.phase == .rest ? "☕ Break: stand up, stretch, drink water" : "⛏️ Round \(timer.round): lock in")
             }
         }
@@ -248,6 +252,9 @@ struct FocusTimerView: View {
     private func toggle() {
         if !timer.started {
             timer.start()
+            if profile.liveActivityOn {
+                LiveActivityController.shared.start(for: timer, pillarName: pillarName)
+            }
             Task {
                 if await Notifier.requestAuthorization() {
                     Notifier.scheduleFocusBoundaries(timer.upcomingBoundaries())
@@ -256,9 +263,11 @@ struct FocusTimerView: View {
         } else if timer.running {
             timer.pause()
             Notifier.cancelFocus()
+            LiveActivityController.shared.update(timer)
         } else {
             timer.resume()
             Notifier.scheduleFocusBoundaries(timer.upcomingBoundaries())
+            LiveActivityController.shared.update(timer)
         }
     }
 
@@ -279,6 +288,7 @@ struct FocusTimerView: View {
         guard !committed else { return }
         committed = true
         Notifier.cancelFocus()
+        LiveActivityController.shared.finish(timer)
         let minutes = timer.earnedMinutes
         let result = Game.commitFocus(minutes: minutes, completed: timer.completed, habitID: timer.habitID, title: timer.title,
                                       startedAt: timer.startedAt, profile: profile, habits: habits, context: context)

@@ -136,8 +136,9 @@ struct ThumbView: View {
             g.translateBy(x: (size.width / k - 80) / 2, y: (size.height / k - 80) / 2)
             switch kind {
             case .prop(let t):
-                TileArt.tile(g, 40, 52, halfWidth: 28, depth: 7)
-                PropArt.draw(t, g, 40, 54, 0.85, 0.6, night: 0)
+                let sc = min(0.85, 46 / max(1, t.tallness))
+                TileArt.tile(g, 40, 52 + (0.85 - sc) * 20, halfWidth: 28 * sc / 0.85, depth: 7 * sc / 0.85)
+                PropArt.draw(t, g, 40, 54 + (0.85 - sc) * 20, sc, 0.6, night: 0)
             case .companion(let t):
                 TileArt.tile(g, 40, 52, halfWidth: 28, depth: 7)
                 CompanionArt.draw(t, g, 40, 54, 1.6, 0.3, face: 1)

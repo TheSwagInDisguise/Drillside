@@ -46,6 +46,34 @@ extension GraphicsContext {
     }
 }
 
+extension GraphicsContext {
+    /// Context translated to (x, y) and sheared so flat shapes read as an isometric face (facing down-right).
+    func skewed(_ x: CGFloat, _ y: CGFloat) -> GraphicsContext {
+        var g = self
+        g.translateBy(x: x, y: y)
+        g.concatenate(CGAffineTransform(a: 1, b: -0.5, c: 0, d: 1, tx: 0, ty: 0))
+        return g
+    }
+
+    func groundDiamondPath(_ x: CGFloat, _ y: CGFloat, _ s: CGFloat, _ k: CGFloat) -> Path {
+        let hw = 28 * s * k, hh = 14 * s * k
+        var p = Path()
+        p.addLines([P(x, y - hh), P(x + hw, y), P(x, y + hh), P(x - hw, y)])
+        p.closeSubpath()
+        return p
+    }
+
+    func flame(_ fx: CGFloat, _ base: CGFloat, _ h: CGFloat, _ w: CGFloat, _ color: Color, _ t: CGFloat, _ ph: CGFloat) {
+        let flick: CGFloat = 1 + sin(t * 11 + ph) * 0.12 + sin(t * 7.3 + ph) * 0.08
+        let hh = h * flick
+        var p = Path()
+        p.move(to: P(fx, base - hh))
+        p.addQuadCurve(to: P(fx, base + 2), control: P(fx + w, base - hh * 0.35))
+        p.addQuadCurve(to: P(fx, base - hh), control: P(fx - w, base - hh * 0.35))
+        fill(p, with: .color(color))
+    }
+}
+
 @inline(__always) func P(_ x: CGFloat, _ y: CGFloat) -> CGPoint { CGPoint(x: x, y: y) }
 
 enum Ink {
@@ -86,6 +114,7 @@ enum PropArt {
         case .hammock: hammock(c, x, y, s, t)
         case .tent: tent(c, x, y, s, t)
         case .telescope: telescope(c, x, y, s, t)
+        default: MoreArt.draw(type, c, x, y, s, t, night: night)
         }
     }
 
@@ -279,7 +308,76 @@ enum CompanionArt {
         case .crab: crab(c, x, y, s, t)
         case .duck: duck(c, x, y, s, t, face)
         case .turtle: turtle(c, x, y, s, t, face)
+        case .cat: cat(c, x, y, s, t, face)
+        case .frog: frog(c, x, y, s, t, face)
+        case .bunny: bunny(c, x, y, s, t, face)
         }
+    }
+
+    static func cat(_ c: GraphicsContext, _ x: CGFloat, _ y: CGFloat, _ s: CGFloat, _ t: CGFloat, _ face: CGFloat) {
+        c.groundShadow(x, y, 8 * s)
+        var g = c
+        g.translateBy(x: x, y: y)
+        g.scaleBy(x: face, y: 1)
+        let fur = Color(hex: 0xF2A14A), dark = Color(hex: 0xD9822B)
+        var tail = Path()
+        tail.move(to: P(-6 * s, -5 * s))
+        tail.addQuadCurve(to: P(-11 * s, -14 * s + sin(t * 3) * 2 * s), control: P(-13 * s, -4 * s))
+        g.stroke(tail, with: .color(fur), style: StrokeStyle(lineWidth: 2.2 * s, lineCap: .round))
+        g.ell(-4 * s, -1 * s, 2 * s, 1.5 * s, dark)
+        g.ell(4 * s, -1 * s, 2 * s, 1.5 * s, dark)
+        g.ell(0, -6 * s, 7.5 * s, 5 * s, fur)
+        g.line(-2 * s, -10 * s, -2 * s, -7 * s, dark, 1 * s)
+        g.line(1 * s, -10.5 * s, 1 * s, -7.5 * s, dark, 1 * s)
+        g.ell(6 * s, -12 * s, 4.6 * s, 4 * s, fur)
+        g.poly([P(3 * s, -15 * s), P(4.5 * s, -19.5 * s), P(6.5 * s, -15.5 * s)], fur)
+        g.poly([P(6.5 * s, -15.5 * s), P(9 * s, -19 * s), P(9.8 * s, -14 * s)], fur)
+        g.ell(5.5 * s, -12.5 * s, 0.8 * s, 1 * s, Color(hex: 0x2A1C12))
+        g.ell(8.5 * s, -12.5 * s, 0.8 * s, 1 * s, Color(hex: 0x2A1C12))
+        g.ell(7.2 * s, -10.6 * s, 0.8 * s, 0.6 * s, Color(hex: 0xF08AA0))
+    }
+
+    static func frog(_ c: GraphicsContext, _ x: CGFloat, _ y: CGFloat, _ s: CGFloat, _ t: CGFloat, _ face: CGFloat) {
+        c.groundShadow(x, y, 7 * s)
+        var g = c
+        g.translateBy(x: x, y: y)
+        g.scaleBy(x: face, y: 1)
+        let green = Color(hex: 0x6CC24A)
+        g.ell(-5 * s, -1 * s, 3 * s, 1.6 * s, Color(hex: 0x58A83A))
+        g.ell(5 * s, -1 * s, 3 * s, 1.6 * s, Color(hex: 0x58A83A))
+        g.ell(0, -4.5 * s, 6.5 * s, 4.5 * s, green)
+        g.ell(1 * s, -3 * s, 4 * s, 2.4 * s, Color(hex: 0xC8E9A0))
+        for ex in [CGFloat(-2.5), CGFloat(3)] {
+            g.ell(ex * s, -9 * s, 2.4 * s, 2.4 * s, green)
+            g.ell(ex * s, -9.3 * s, 1.4 * s, 1.4 * s, .white)
+            g.ell(ex * s + 0.3 * s, -9.3 * s, 0.7 * s, 0.8 * s, Color(hex: 0x222222))
+        }
+        var mouth = Path()
+        mouth.move(to: P(-2 * s, -5.5 * s))
+        mouth.addQuadCurve(to: P(4 * s, -5.5 * s), control: P(1 * s, -3.8 * s))
+        g.stroke(mouth, with: .color(Color(hex: 0x3E7F2A)), lineWidth: 0.6 * s)
+    }
+
+    static func bunny(_ c: GraphicsContext, _ x: CGFloat, _ y: CGFloat, _ s: CGFloat, _ t: CGFloat, _ face: CGFloat) {
+        c.groundShadow(x, y, 7 * s)
+        var g = c
+        g.translateBy(x: x, y: y)
+        g.scaleBy(x: face, y: 1)
+        let white = Color(hex: 0xF5F2EC), shade = Color(hex: 0xE2DCD2)
+        g.ell(-6.5 * s, -6 * s, 2.4 * s, 2.4 * s, .white)
+        g.ell(0, -6 * s, 6.5 * s, 5.5 * s, white)
+        g.ell(-1 * s, -4 * s, 4 * s, 2.6 * s, shade)
+        let flop: CGFloat = sin(t * 2.5) * 0.12
+        for (i, ex) in [CGFloat(3.5), CGFloat(6.5)].enumerated() {
+            var ear = g
+            ear.translateBy(x: ex * s, y: -14 * s)
+            ear.rotate(by: .radians(Double(CGFloat(i) * 0.35 - 0.1 + flop)))
+            ear.ell(0, -4 * s, 1.6 * s, 4.5 * s, white)
+            ear.ell(0, -4 * s, 0.8 * s, 3.2 * s, Color(hex: 0xF7B6C8))
+        }
+        g.ell(5 * s, -11 * s, 4 * s, 3.6 * s, white)
+        g.ell(6.2 * s, -11.6 * s, 0.8 * s, 0.9 * s, Color(hex: 0x2A1C12))
+        g.ell(8.6 * s, -10.4 * s, 0.7 * s, 0.5 * s, Color(hex: 0xF08AA0))
     }
 
     static func crab(_ c: GraphicsContext, _ x: CGFloat, _ y: CGFloat, _ s: CGFloat, _ t: CGFloat) {

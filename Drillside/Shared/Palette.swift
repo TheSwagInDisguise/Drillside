@@ -1,14 +1,6 @@
 import SwiftUI
 
 extension Color {
-    init(hex: UInt32, opacity: Double = 1) {
-        self.init(.sRGB,
-                  red: Double((hex >> 16) & 0xFF) / 255,
-                  green: Double((hex >> 8) & 0xFF) / 255,
-                  blue: Double(hex & 0xFF) / 255,
-                  opacity: opacity)
-    }
-
     /// Linear blend between two hex colours (k = 0 → a, k = 1 → b).
     static func mix(_ a: UInt32, _ b: UInt32, _ k: CGFloat) -> Color {
         let kk = Double(min(1, max(0, k)))
@@ -41,7 +33,10 @@ enum Pillars {
         Color(hex: 0xF2A541), Color(hex: 0x3FB47A), Color(hex: 0x5B8DEF), Color(hex: 0xA77BDB), Color(hex: 0xE5675A)
     ]
 
+    static let hexes: [UInt32] = [0xF2A541, 0x3FB47A, 0x5B8DEF, 0xA77BDB, 0xE5675A]
+
     static func color(_ i: Int) -> Color { colors[max(0, min(colors.count - 1, i))] }
+    static func hex(_ i: Int) -> UInt32 { hexes[max(0, min(hexes.count - 1, i))] }
 
     static func letter(_ name: String) -> String {
         guard let ch = name.trimmingCharacters(in: .whitespaces).first else { return "?" }

@@ -141,10 +141,16 @@ struct SettingsView: View {
     }
 
     private var timerSection: some View {
-        Section("Focus timer defaults") {
+        Section {
+            Toggle("Show in Dynamic Island", isOn: $profile.liveActivityOn)
+                .tint(Theme.good)
             StepperRow(title: "Work", value: profile.workMinutes, unit: "min", range: 5...120, step: 5) { profile.workMinutes = $0 }
             StepperRow(title: "Break", value: profile.breakMinutes, unit: "min", range: 1...30) { profile.breakMinutes = $0 }
             StepperRow(title: "Rounds", value: profile.rounds, unit: "", range: 1...8) { profile.rounds = $0 }
+        } header: {
+            Text("Focus timer")
+        } footer: {
+            Text("Running sessions appear as a Live Activity in the Dynamic Island and on the Lock Screen. Live Activities must also be allowed for Drillside in iOS Settings.")
         }
     }
 
