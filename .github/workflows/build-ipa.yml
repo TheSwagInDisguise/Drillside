@@ -81,7 +81,9 @@ jobs:
           echo "Bundle id: $(/usr/libexec/PlistBuddy -c 'Print :CFBundleIdentifier' "$APP/Info.plist")"
           echo "Version:   $(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' "$APP/Info.plist") ($(/usr/libexec/PlistBuddy -c 'Print :CFBundleVersion' "$APP/Info.plist"))"
           echo "Live Activities: $(/usr/libexec/PlistBuddy -c 'Print :NSSupportsLiveActivities' "$APP/Info.plist")"
-          echo "Files sharing:   $(/usr/libexec/PlistBuddy -c 'Print :UIFileSharingEnabled' "$APP/Info.plist")"
+          FILES=$(/usr/libexec/PlistBuddy -c 'Print :UIFileSharingEnabled' "$APP/Info.plist" 2>/dev/null || echo missing)
+          echo "Files sharing:   $FILES"
+          [ "$FILES" = "true" ] || { echo "::error::UIFileSharingEnabled missing: backups wouldn't show in the Files app"; exit 1; }
           if find "$APP" -name '*.xcent' | grep -q .; then
             echo "::warning::Unexpected entitlements found"; find "$APP" -name '*.xcent' -exec cat {} \;
           fi
