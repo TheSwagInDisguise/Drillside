@@ -19,13 +19,23 @@ struct SettingsView: View {
                 pillarsSection
                 timerSection
                 reminderSection
-                Section("Appearance") {
+                Section {
                     Picker("Theme", selection: $profile.theme) {
                         Text("System").tag("system")
                         Text("Light").tag("light")
                         Text("Dark").tag("dark")
                     }
                     .pickerStyle(.segmented)
+                    Picker("Island sky", selection: $profile.skyMode) {
+                        Text("Follow clock").tag("auto")
+                        Text("Day").tag("day")
+                        Text("Night").tag("night")
+                    }
+                } header: {
+                    Text("Appearance")
+                } footer: {
+                    let st = SkyClock.sunTimes(for: Date())
+                    Text("“Follow clock” runs a real day–night cycle on your island: golden sunrise and sunset, a moving sun and moon, and lights switching on at dusk. Today: sunrise ≈ \(Self.hm(st.sunrise)), sunset ≈ \(Self.hm(st.sunset)).")
                 }
                 backupSection
                 Section {
@@ -193,6 +203,12 @@ struct SettingsView: View {
         } footer: {
             Text("Backups are plain JSON files you can keep in Files, iCloud Drive or anywhere you like.")
         }
+    }
+
+    static func hm(_ h: Double) -> String {
+        let total = Int((h * 60).rounded())
+        let d = Calendar.current.date(bySettingHour: (total / 60) % 24, minute: total % 60, second: 0, of: Date()) ?? Date()
+        return d.formatted(date: .omitted, time: .shortened)
     }
 
     private var reminderDate: Date {

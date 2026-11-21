@@ -1,7 +1,6 @@
 name: Build unsigned IPA
 
-# Every push to main publishes a GitHub pre-release ("release candidate") with the unsigned .ipa attached.
-# Run manually with release_type = final to publish a full release instead.
+# Every push to main publishes a full GitHub release (marked Latest) with the unsigned .ipa attached.
 # Pull requests only build + test (artifact attached to the run, no release).
 
 on:
@@ -9,12 +8,6 @@ on:
     branches: [main]
   pull_request:
   workflow_dispatch:
-    inputs:
-      release_type:
-        description: "rc = pre-release candidate, final = full release (vX.Y.Z)"
-        type: choice
-        options: [rc, final]
-        default: rc
 
 permissions:
   contents: read
@@ -57,11 +50,7 @@ jobs:
         run: |
           MARKETING=$(grep -m1 'MARKETING_VERSION = ' "$PROJECT/project.pbxproj" | sed -E 's/.*= ([^;]+);/\1/')
           BUILD=${{ github.run_number }}
-          if [ "${{ inputs.release_type }}" = "final" ]; then
-            TAG="v$MARKETING"; TITLE="Drillside $MARKETING"
-          else
-            TAG="v$MARKETING-rc.$BUILD"; TITLE="Drillside $MARKETING RC $BUILD"
-          fi
+          TAG="v$MARKETING.$BUILD"; TITLE="Drillside $MARKETING (build $BUILD)"
           echo "marketing=$MARKETING" >> "$GITHUB_OUTPUT"
           echo "build=$BUILD" >> "$GITHUB_OUTPUT"
           echo "tag=$TAG" >> "$GITHUB_OUTPUT"
@@ -128,11 +117,7 @@ jobs:
             fi
           } > notes.md
           cat notes.md
-          if [ "${{ inputs.release_type }}" = "final" ]; then
-            gh release create "$TAG" "$IPA" --target "$GITHUB_SHA" --title "$TITLE" --notes-file notes.md --latest
-          else
-            gh release create "$TAG" "$IPA" --target "$GITHUB_SHA" --title "$TITLE" --notes-file notes.md --prerelease
-          fi
+          gh release create "$TAG" "$IPA" --target "$GITHUB_SHA" --title "$TITLE" --notes-file notes.md --latest
           URL=$(gh release view "$TAG" --json url --jq .url)
           echo "### 🚀 [$TITLE]($URL)" >> "$GITHUB_STEP_SUMMARY"
           echo "Attached: \`$(basename "$IPA")\`" >> "$GITHUB_STEP_SUMMARY"

@@ -33,7 +33,7 @@ enum MoreArt {
         case .meadow: meadow(c, x, y, s, t)
         case .deck: deck(c, x, y, s)
         case .pond: pond(c, x, y, s, t)
-        default: break
+        default: ExtraArt.draw(type, c, x, y, s, t, night: night)
         }
     }
 

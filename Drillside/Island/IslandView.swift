@@ -1,4 +1,5 @@
 import SwiftUI
+import Combine
 import SwiftData
 
 struct IslandView: View {
@@ -20,6 +21,21 @@ struct IslandView: View {
     @State private var showReset = false
     @State private var baseZoom: CGFloat = 1
     @State private var cameraMoved = false
+    @State private var clock = Date()
+
+    private var skyMode: SkyClock.Mode { SkyClock.Mode(rawValue: profile.skyMode) ?? .auto }
+    private var sky: SkyClock.State { SkyClock.resolved(mode: skyMode, at: clock) }
+    /// HUD contrast follows the sky (switches once it's mostly dark).
+    private var hudNight: Bool { sky.night > 0.55 }
+
+    private func clockString(_ h: Double) -> String {
+        let total = Int((h * 60).rounded())
+        var c = DateComponents()
+        c.hour = (total / 60) % 24
+        c.minute = total % 60
+        let d = Calendar.current.date(from: c) ?? Date()
+        return d.formatted(date: .omitted, time: .shortened)
+    }
 
     private var today: String { Day.today }
 
@@ -53,6 +69,7 @@ struct IslandView: View {
             Text("Companions and island size are not affected.")
         }
         .onAppear(perform: consumePendingPlacement)
+        .onReceive(Timer.publish(every: 30, on: .main, in: .common).autoconnect()) { clock = $0 }
         .onChange(of: router.openEditor) { _, open in if open { consumePendingPlacement() } }
     }
 
@@ -66,7 +83,7 @@ struct IslandView: View {
                 e.gridSize = profile.islandSize
                 e.props = placed.map { PropSnapshot(id: $0.id, type: $0.type, row: $0.row, col: $0.col) }
                 e.companions = profile.ownedCompanions
-                e.isNight = profile.isNight
+                e.skyMode = skyMode
                 e.editing = editing
                 e.placing = placing
                 e.selected = selected
@@ -201,7 +218,7 @@ struct IslandView: View {
                     }
                 }
                 .padding(.vertical, 7).padding(.leading, 7).padding(.trailing, 12)
-                .glass(night: profile.isNight)
+                .glass(night: hudNight)
                 .accessibilityElement(children: .combine)
 
                 Text("🐚 \(profile.shells)")
@@ -209,19 +226,26 @@ struct IslandView: View {
                     .monospacedDigit()
                     .padding(.horizontal, 12)
                     .frame(maxHeight: .infinity)
-                    .glass(night: profile.isNight)
+                    .glass(night: hudNight)
                     .accessibilityLabel("\(profile.shells) shells")
 
                 Button {
-                    withAnimation { profile.isNight.toggle() }
+                    let next = skyMode.next
+                    profile.skyMode = next.rawValue
+                    toasts.show(next == .auto ? "🕰️ Sky follows your clock (sunrise \(clockString(sky.sunrise)), sunset \(clockString(sky.sunset)))" : (next == .day ? "☀️ Always day" : "🌙 Always night"))
                 } label: {
-                    Image(systemName: profile.isNight ? "sun.max" : "moon")
+                    Image(systemName: skyMode == .auto ? (hudNight ? "moon.stars" : "sun.max") : skyMode.icon)
                         .font(.system(size: 18, weight: .semibold))
                         .frame(width: 48)
                         .frame(maxHeight: .infinity)
+                        .overlay(alignment: .bottomTrailing) {
+                            if skyMode == .auto {
+                                Image(systemName: "clock.fill").font(.system(size: 9, weight: .bold)).padding(5)
+                            }
+                        }
                 }
-                .glass(night: profile.isNight)
-                .accessibilityLabel(profile.isNight ? "Switch to day" : "Switch to night")
+                .glass(night: hudNight)
+                .accessibilityLabel("Sky: \(skyMode.label). Tap to change.")
             }
             .fixedSize(horizontal: false, vertical: true)
 
@@ -233,7 +257,7 @@ struct IslandView: View {
                 }
                 .font(.system(size: 12.5, weight: .bold, design: .rounded))
                 .padding(.horizontal, 11).padding(.vertical, 6)
-                .glass(night: profile.isNight, radius: 12)
+                .glass(night: hudNight, radius: 12)
                 Spacer()
                 if cameraMoved {
                     Button(action: recenter) {
@@ -241,7 +265,7 @@ struct IslandView: View {
                             .font(.system(size: 12.5, weight: .bold, design: .rounded))
                             .padding(.horizontal, 10).padding(.vertical, 6)
                     }
-                    .glass(night: profile.isNight, radius: 12)
+                    .glass(night: hudNight, radius: 12)
                     .transition(.opacity)
                 }
             }
@@ -255,7 +279,7 @@ struct IslandView: View {
             } label: {
                 Image(systemName: "pencil").font(.system(size: 20, weight: .semibold)).frame(width: 60, height: 60)
             }
-            .glass(night: profile.isNight, radius: 20)
+            .glass(night: hudNight, radius: 20)
             .accessibilityLabel("Edit island")
 
             Button {
@@ -288,7 +312,7 @@ struct IslandView: View {
             } label: {
                 Image(systemName: "list.bullet").font(.system(size: 20, weight: .semibold)).frame(width: 60, height: 60)
             }
-            .glass(night: profile.isNight, radius: 20)
+            .glass(night: hudNight, radius: 20)
             .accessibilityLabel("Choose a focus block")
         }
     }
@@ -370,7 +394,7 @@ struct IslandView: View {
             }
         }
         .padding(12)
-        .glass(night: profile.isNight, radius: 20)
+        .glass(night: hudNight, radius: 20)
         .transition(.move(edge: .bottom).combined(with: .opacity))
     }
 

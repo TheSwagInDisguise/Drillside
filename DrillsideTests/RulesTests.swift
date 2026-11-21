@@ -109,7 +109,8 @@ final class EconomyTests: XCTestCase {
     }
 
     func testCatalogIsConsistent() {
-        XCTAssertGreaterThanOrEqual(PropType.allCases.count, 35)
+        XCTAssertGreaterThanOrEqual(PropType.allCases.count, 60)
+        for cat in PropCategory.allCases { XCTAssertFalse(PropType.items(in: cat).isEmpty, "\(cat) is empty") }
         XCTAssertEqual(Set(PropType.allCases.map(\.name)).count, PropType.allCases.count, "names must be unique")
         for p in PropType.allCases {
             XCTAssertGreaterThan(p.price, 0)
@@ -118,7 +119,8 @@ final class EconomyTests: XCTestCase {
         }
         XCTAssertFalse(PropType.pond.isWalkable)
         XCTAssertTrue(PropType.path.isWalkable)
-        XCTAssertEqual(CompanionType.allCases.count, 6)
+        XCTAssertEqual(CompanionType.allCases.count, 9)
+        XCTAssertEqual(Set(CompanionType.allCases.map(\.name)).count, 9)
     }
 }
 
@@ -153,5 +155,43 @@ final class FocusTimerTests: XCTestCase {
         timer.end(at: t0.addingTimeInterval(62 * 60 + 10))
         XCTAssertEqual(timer.earnedMinutes, 7)
         XCTAssertFalse(timer.completed)
+    }
+}
+
+final class SkyClockTests: XCTestCase {
+    func testDayNightAndGolden() {
+        let noon = SkyClock.state(hour: 13, sunrise: 6.5, sunset: 20)
+        XCTAssertEqual(noon.night, 0, accuracy: 0.001)
+        XCTAssertEqual(noon.golden, 0, accuracy: 0.001)
+        let midnight = SkyClock.state(hour: 0.5, sunrise: 6.5, sunset: 20)
+        XCTAssertEqual(midnight.night, 1, accuracy: 0.001)
+        let sunset = SkyClock.state(hour: 19.9, sunrise: 6.5, sunset: 20)
+        XCTAssertGreaterThan(sunset.golden, 0.5)
+        XCTAssertLessThan(sunset.night, 0.4)
+        let lateDusk = SkyClock.state(hour: 20.5, sunrise: 6.5, sunset: 20)
+        XCTAssertGreaterThan(lateDusk.night, 0.3)
+        XCTAssertLessThan(lateDusk.night, 1)
+        let dawn = SkyClock.state(hour: 6.5, sunrise: 6.5, sunset: 20)
+        XCTAssertGreaterThan(dawn.golden, 0.3)
+    }
+
+    func testSeasonsChangeDayLength() {
+        let cal = Calendar(identifier: .gregorian)
+        let tz = TimeZone(identifier: "Europe/Amsterdam")!
+        let june = cal.date(from: DateComponents(timeZone: tz, year: 2026, month: 6, day: 21, hour: 12))!
+        let december = cal.date(from: DateComponents(timeZone: tz, year: 2026, month: 12, day: 21, hour: 12))!
+        let j = SkyClock.sunTimes(for: june, calendar: cal, timeZone: tz)
+        let d = SkyClock.sunTimes(for: december, calendar: cal, timeZone: tz)
+        XCTAssertGreaterThan(j.sunset - j.sunrise, d.sunset - d.sunrise + 5)
+        let syd = TimeZone(identifier: "Australia/Sydney")!
+        let sj = SkyClock.sunTimes(for: june, calendar: cal, timeZone: syd)
+        XCTAssertLessThan(sj.sunset - sj.sunrise, 11)
+    }
+
+    func testForcedModes() {
+        XCTAssertEqual(SkyClock.resolved(mode: .day, at: Date()).night, 0)
+        XCTAssertEqual(SkyClock.resolved(mode: .night, at: Date()).night, 1)
+        XCTAssertEqual(SkyClock.Mode.auto.next, .day)
+        XCTAssertEqual(SkyClock.Mode.night.next, .auto)
     }
 }

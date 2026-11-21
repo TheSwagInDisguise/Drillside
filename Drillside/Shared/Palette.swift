@@ -1,6 +1,23 @@
 import SwiftUI
 
 extension Color {
+    /// Packs an RGB triple as 0xRRGGBB-style components (0…1).
+    struct RGB { var r: Double, g: Double, b: Double }
+
+    init(rgb: RGB) { self.init(.sRGB, red: rgb.r, green: rgb.g, blue: rgb.b, opacity: 1) }
+
+    static func rgb(_ hex: UInt32) -> RGB {
+        RGB(r: Double((hex >> 16) & 0xFF) / 255, g: Double((hex >> 8) & 0xFF) / 255, b: Double(hex & 0xFF) / 255)
+    }
+
+    static func mixRGB(_ a: RGB, _ b: RGB, _ k: CGFloat) -> RGB {
+        let kk = Double(min(1, max(0, k)))
+        return RGB(r: a.r + (b.r - a.r) * kk, g: a.g + (b.g - a.g) * kk, b: a.b + (b.b - a.b) * kk)
+    }
+
+    static func mixRGB(_ a: UInt32, _ b: UInt32, _ k: CGFloat) -> RGB { mixRGB(rgb(a), rgb(b), k) }
+    static func mixRGB(_ a: RGB, _ b: UInt32, _ k: CGFloat) -> RGB { mixRGB(a, rgb(b), k) }
+
     /// Linear blend between two hex colours (k = 0 → a, k = 1 → b).
     static func mix(_ a: UInt32, _ b: UInt32, _ k: CGFloat) -> Color {
         let kk = Double(min(1, max(0, k)))

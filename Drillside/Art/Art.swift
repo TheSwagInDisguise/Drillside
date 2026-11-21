@@ -311,7 +311,76 @@ enum CompanionArt {
         case .cat: cat(c, x, y, s, t, face)
         case .frog: frog(c, x, y, s, t, face)
         case .bunny: bunny(c, x, y, s, t, face)
+        case .fox: fox(c, x, y, s, t, face)
+        case .penguin: penguin(c, x, y, s, t, face)
+        case .owl: owl(c, x, y, s, t, face)
         }
+    }
+
+    static func fox(_ c: GraphicsContext, _ x: CGFloat, _ y: CGFloat, _ s: CGFloat, _ t: CGFloat, _ face: CGFloat) {
+        c.groundShadow(x, y, 9 * s)
+        var g = c
+        g.translateBy(x: x, y: y)
+        g.scaleBy(x: face, y: 1)
+        let orange = Color(hex: 0xE8782C), cream = Color(hex: 0xFBEFE0), dark = Color(hex: 0x3A2A22)
+        var tail = g
+        tail.translateBy(x: -6 * s, y: -6 * s)
+        tail.rotate(by: .radians(Double(-0.5 + sin(t * 2.4) * 0.15)))
+        tail.ell(-5 * s, 0, 6 * s, 2.8 * s, orange)
+        tail.ell(-9.5 * s, 0, 2 * s, 1.8 * s, cream)
+        g.rrect(-4.5 * s, -3 * s, 1.8 * s, 3.5 * s, 0.8 * s, dark)
+        g.rrect(3 * s, -3 * s, 1.8 * s, 3.5 * s, 0.8 * s, dark)
+        g.ell(0, -6 * s, 7.5 * s, 4.5 * s, orange)
+        g.ell(3.5 * s, -5 * s, 3 * s, 2.6 * s, cream)
+        g.ell(7 * s, -11 * s, 4.2 * s, 3.6 * s, orange)
+        g.poly([P(4 * s, -13.5 * s), P(4.8 * s, -18.5 * s), P(7 * s, -14.5 * s)], orange)
+        g.poly([P(7.5 * s, -14.5 * s), P(9.8 * s, -18.5 * s), P(10.4 * s, -13 * s)], orange)
+        g.poly([P(9 * s, -12 * s), P(13.5 * s, -10 * s), P(9 * s, -8.6 * s)], cream)
+        g.ell(13.4 * s, -10 * s, 0.8 * s, 0.7 * s, dark)
+        g.ell(8 * s, -12 * s, 0.7 * s, 0.9 * s, dark)
+    }
+
+    static func penguin(_ c: GraphicsContext, _ x: CGFloat, _ y: CGFloat, _ s: CGFloat, _ t: CGFloat, _ face: CGFloat) {
+        c.groundShadow(x, y, 7 * s)
+        var g = c
+        g.translateBy(x: x, y: y)
+        g.rotate(by: .radians(Double(sin(t * 7) * 0.09)))
+        g.scaleBy(x: face, y: 1)
+        let orange = Color(hex: 0xFF9A3C)
+        g.ell(-2.5 * s, -0.5 * s, 2.4 * s, 1.1 * s, orange)
+        g.ell(2.5 * s, -0.5 * s, 2.4 * s, 1.1 * s, orange)
+        g.ell(0, -9 * s, 6 * s, 8.5 * s, Color(hex: 0x2B3140))
+        g.ell(1 * s, -8 * s, 4.2 * s, 6.5 * s, .white)
+        g.ell(-5.5 * s, -9 * s, 1.6 * s, 4.5 * s, Color(hex: 0x232835))
+        g.ell(2.5 * s, -14.5 * s, 0.9 * s, 1 * s, Color(hex: 0x222222))
+        g.poly([P(4 * s, -13.5 * s), P(7.5 * s, -12.6 * s), P(4 * s, -11.8 * s)], orange)
+    }
+
+    static func owl(_ c: GraphicsContext, _ x: CGFloat, _ y: CGFloat, _ s: CGFloat, _ t: CGFloat, _ face: CGFloat) {
+        c.groundShadow(x, y, 7 * s)
+        var g = c
+        g.translateBy(x: x, y: y)
+        g.scaleBy(x: face, y: 1)
+        let brown = Color(hex: 0x8C6A4A), light = Color(hex: 0xD9C2A0)
+        g.ell(0, -8 * s, 6.5 * s, 7.5 * s, brown)
+        g.ell(0, -6 * s, 4.2 * s, 5 * s, light)
+        for k in 0..<3 {
+            g.line(-2 * s + CGFloat(k) * 2 * s, -5 * s, -1.4 * s + CGFloat(k) * 2 * s, -4 * s, Color(hex: 0xA88A66), 0.6 * s)
+        }
+        g.poly([P(-5 * s, -13 * s), P(-4.5 * s, -18 * s), P(-2 * s, -14.5 * s)], brown)
+        g.poly([P(5 * s, -13 * s), P(4.5 * s, -18 * s), P(2 * s, -14.5 * s)], brown)
+        let blink = t.truncatingRemainder(dividingBy: 4.3) < 0.15
+        for ex in [CGFloat(-2.5), CGFloat(2.5)] {
+            g.ell(ex * s, -12 * s, 2.4 * s, 2.4 * s, Color(hex: 0xF4E3B5))
+            if blink {
+                g.line(ex * s - 1.4 * s, -12 * s, ex * s + 1.4 * s, -12 * s, Color(hex: 0x2A1C12), 0.8 * s)
+            } else {
+                g.ell(ex * s, -12 * s, 1.2 * s, 1.2 * s, Color(hex: 0x2A1C12))
+            }
+        }
+        g.poly([P(-1 * s, -10.5 * s), P(1 * s, -10.5 * s), P(0, -8.5 * s)], Color(hex: 0xF2A541))
+        g.ell(-2 * s, -0.4 * s, 1.4 * s, 0.7 * s, Color(hex: 0xF2A541))
+        g.ell(2 * s, -0.4 * s, 1.4 * s, 0.7 * s, Color(hex: 0xF2A541))
     }
 
     static func cat(_ c: GraphicsContext, _ x: CGFloat, _ y: CGFloat, _ s: CGFloat, _ t: CGFloat, _ face: CGFloat) {

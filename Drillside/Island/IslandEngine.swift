@@ -27,7 +27,7 @@ final class IslandEngine {
     var gridSize = 6
     var props: [PropSnapshot] = []
     var companions: [CompanionType] = []
-    var isNight = false
+    var skyMode: SkyClock.Mode = .auto
     var editing = false
     var placing: PropType?
     var selected: UUID?
@@ -47,7 +47,13 @@ final class IslandEngine {
 
     // Clock
     private(set) var t: CGFloat = 0
-    private var nightT: CGFloat = 0
+    private var nightT: CGFloat = -1
+    private var goldenT: CGFloat = 0
+    private var sunP: CGFloat = 0.5
+    private var moonP: CGFloat = 0.5
+    private var sky = SkyClock.State(night: 0, golden: 0, sunProgress: 0.5, moonProgress: 0.5, sunrise: 6, sunset: 20)
+    private var skyCheckedAt: Date = .distantPast
+    private var lastSkyMode: SkyClock.Mode = .auto
     private var lastDate: Date?
 
     // Bitsy
@@ -167,7 +173,17 @@ final class IslandEngine {
         if let last = lastDate { dt = CGFloat(min(0.05, max(0, date.timeIntervalSince(last)))) } else { dt = 0 }
         lastDate = date
         t += dt
-        nightT += ((isNight ? 1 : 0) - nightT) * min(1, dt * 3)
+        if date.timeIntervalSince(skyCheckedAt) > 1 || skyMode != lastSkyMode {
+            sky = SkyClock.resolved(mode: skyMode, at: date)
+            skyCheckedAt = date
+            lastSkyMode = skyMode
+        }
+        if nightT < 0 { nightT = CGFloat(sky.night); goldenT = CGFloat(sky.golden) }
+        let k = min(1, dt * 1.5)
+        nightT += (CGFloat(sky.night) - nightT) * k
+        goldenT += (CGFloat(sky.golden) - goldenT) * k
+        sunP += (CGFloat(sky.sunProgress) - sunP) * k
+        moonP += (CGFloat(sky.moonProgress) - moonP) * k
         mR = min(CGFloat(gridSize) - 0.5, mR)
         mC = min(CGFloat(gridSize) - 0.5, mC)
         updateMole(dt)
@@ -360,22 +376,40 @@ final class IslandEngine {
         guard W > 0, H > 0 else { return }
         let n = gridSize
         let s = scale
-        let nt = nightT
+        let nt = max(0, nightT)
+        let gt = goldenT
 
-        // Sea
-        let sea = Gradient(colors: [Color.mix(0xA6E6E8, 0x101C3E, nt), Color.mix(0x4DB6C8, 0x08112A, nt)])
+        // Sea: day blue → golden-hour peach → night navy
+        let seaTop = Color.mixRGB(Color.mixRGB(0xA6E6E8, 0xF5B88E, gt * 0.85), 0x101C3E, nt)
+        let seaBottom = Color.mixRGB(Color.mixRGB(0x4DB6C8, 0x5B86B5, gt * 0.7), 0x08112A, nt)
+        let sea = Gradient(colors: [Color(rgb: seaTop), Color(rgb: seaBottom)])
         ctx.fill(Path(CGRect(origin: .zero, size: size)), with: .linearGradient(sea, startPoint: .zero, endPoint: CGPoint(x: 0, y: H)))
+
+        // Sun: arcs left → right over the day, warmer and lower near sunrise/sunset
+        if nt < 0.98 {
+            let sx = W * (0.12 + 0.76 * sunP)
+            let sy = H * 0.24 - sin(sunP * .pi) * H * 0.1
+            let a = Double(1 - nt)
+            let sunCol = Color(rgb: Color.mixRGB(0xFFF4C2, 0xFF9A55, gt))
+            let halo = Gradient(colors: [sunCol.opacity(0.75 * a), sunCol.opacity(0)])
+            ctx.fill(Path(ellipseIn: CGRect(x: sx - 70, y: sy - 70, width: 140, height: 140)),
+                     with: .radialGradient(halo, center: P(sx, sy), startRadius: 0, endRadius: 70))
+            ctx.ell(sx, sy, 15, 15, sunCol.opacity(a))
+            // reflection streak on the water
+            ctx.ell(sx, sy + 26, 22, 3, sunCol.opacity(0.35 * a))
+        }
 
         if nt > 0.02 {
             for st in stars {
                 let a = Double(nt * (0.35 + 0.35 * sin(t * 2 + st.ph)))
                 ctx.ell(st.x * W, st.y * H, st.r, st.r, Color(hex: 0xFFFFF0, opacity: a))
             }
-            let moon = CGPoint(x: W - 70, y: H * 0.2)
+            let moon = CGPoint(x: W * (0.12 + 0.76 * moonP), y: H * 0.22 - sin(moonP * .pi) * H * 0.08)
             let glow = Gradient(colors: [Color(hex: 0xFFFADC, opacity: Double(0.9 * nt)), Color(hex: 0xFFFADC, opacity: 0)])
             ctx.fill(Path(ellipseIn: CGRect(x: moon.x - 40, y: moon.y - 40, width: 80, height: 80)),
                      with: .radialGradient(glow, center: moon, startRadius: 0, endRadius: 40))
             ctx.ell(moon.x, moon.y, 11, 11, Color(hex: 0xFFFAE1, opacity: Double(nt)))
+            ctx.ell(moon.x + 4, moon.y - 2, 8, 8, Color(rgb: Color.mixRGB(0xA6E6E8, 0x101C3E, nt)).opacity(Double(nt) * 0.9))
         }
 
         for w in waves {
@@ -488,35 +522,57 @@ final class IslandEngine {
             }
         }
 
-        // Night overlay + light glows
+        // Golden-hour wash
+        if gt > 0.01 {
+            ctx.fill(Path(CGRect(origin: .zero, size: size)), with: .color(Color(hex: 0xFF8C50, opacity: Double(0.16 * gt))))
+        }
+
+        // Night: a darkness layer with holes punched by every light source, then a warm additive glow.
         if nt > 0.01 {
-            ctx.fill(Path(CGRect(origin: .zero, size: size)), with: .color(Color(hex: 0x0A1030, opacity: Double(0.5 * nt))))
-            var light = ctx
-            light.blendMode = .plusLighter
-            func glow(_ c: CGPoint, _ r: CGFloat, _ color: Color, _ a: Double) {
-                let grad = Gradient(colors: [color.opacity(a), color.opacity(0)])
-                light.fill(Path(ellipseIn: CGRect(x: c.x - r, y: c.y - r, width: r * 2, height: r * 2)),
-                           with: .radialGradient(grad, center: c, startRadius: 0, endRadius: r))
-            }
+            let lightsOn = Double(min(1, max(0, (nt - 0.15) / 0.4)))
+            var sources: [(CGPoint, CGFloat, Color)] = []
             for p in props {
                 guard let L = p.type.light else { continue }
                 let pt = project(CGFloat(p.row) + 0.5, CGFloat(p.col) + 0.5)
-                let flicker: CGFloat = 1 + 0.05 * sin(t * 9)
-                glow(P(pt.x + L.dx * s, pt.y + L.dy * s), L.radius * s * flicker, L.color, Double(0.55 * nt))
+                let flicker: CGFloat = L.flickers ? 1 + 0.05 * sin(t * 9 + CGFloat(p.row)) : 1
+                sources.append((P(pt.x + L.dx * s, pt.y + L.dy * s), L.radius * s * flicker, L.color))
             }
-            glow(P(mp.x, moleY - 31 * s - bob - jumpH), 26 * s, Color(hex: 0xFFF5C8), Double(0.45 * nt))
+            let lamp = P(mp.x, moleY - 31 * s - bob - jumpH)
+            sources.append((lamp, 30 * s, Color(hex: 0xFFF5C8)))
+
+            ctx.drawLayer { layer in
+                layer.fill(Path(CGRect(origin: .zero, size: size)), with: .color(Color(hex: 0x0A1030, opacity: Double(0.6 * nt))))
+                layer.blendMode = .destinationOut
+                for src in sources {
+                    let r = src.1 * 1.25
+                    let grad = Gradient(stops: [.init(color: .black.opacity(0.92 * lightsOn), location: 0),
+                                                .init(color: .black.opacity(0.55 * lightsOn), location: 0.45),
+                                                .init(color: .black.opacity(0), location: 1)])
+                    layer.fill(Path(ellipseIn: CGRect(x: src.0.x - r, y: src.0.y - r, width: r * 2, height: r * 2)),
+                               with: .radialGradient(grad, center: src.0, startRadius: 0, endRadius: r))
+                }
+            }
+
+            var light = ctx
+            light.blendMode = .plusLighter
+            for src in sources {
+                let r = src.1
+                let grad = Gradient(colors: [src.2.opacity(0.42 * Double(nt) * lightsOn), src.2.opacity(0)])
+                light.fill(Path(ellipseIn: CGRect(x: src.0.x - r, y: src.0.y - r, width: r * 2, height: r * 2)),
+                           with: .radialGradient(grad, center: src.0, startRadius: 0, endRadius: r))
+            }
             for p in props where p.type == .lighthouse {
                 let pt = project(CGFloat(p.row) + 0.5, CGFloat(p.col) + 0.5)
-                let lamp = P(pt.x, pt.y - 57 * s)
+                let lampPt = P(pt.x, pt.y - 57 * s)
                 let a = t * 0.8
                 let len: CGFloat = 320 * s
                 var beam = Path()
-                beam.move(to: lamp)
-                beam.addLine(to: P(lamp.x + cos(a - 0.09) * len, lamp.y + sin(a - 0.09) * len * 0.5))
-                beam.addLine(to: P(lamp.x + cos(a + 0.09) * len, lamp.y + sin(a + 0.09) * len * 0.5))
+                beam.move(to: lampPt)
+                beam.addLine(to: P(lampPt.x + cos(a - 0.09) * len, lampPt.y + sin(a - 0.09) * len * 0.5))
+                beam.addLine(to: P(lampPt.x + cos(a + 0.09) * len, lampPt.y + sin(a + 0.09) * len * 0.5))
                 beam.closeSubpath()
-                let grad = Gradient(colors: [Color(hex: 0xFFF6C8, opacity: Double(0.35 * nt)), Color(hex: 0xFFF6C8, opacity: 0)])
-                light.fill(beam, with: .radialGradient(grad, center: lamp, startRadius: 0, endRadius: len))
+                let grad = Gradient(colors: [Color(hex: 0xFFF6C8, opacity: 0.35 * Double(nt) * lightsOn), Color(hex: 0xFFF6C8, opacity: 0)])
+                light.fill(beam, with: .radialGradient(grad, center: lampPt, startRadius: 0, endRadius: len))
             }
         }
 

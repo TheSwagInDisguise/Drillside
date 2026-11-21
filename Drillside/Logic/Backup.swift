@@ -14,6 +14,8 @@ struct BackupFile: Codable {
         var workMinutes: Int, breakMinutes: Int, rounds: Int
         var reminderOn: Bool, reminderHour: Int, reminderMinute: Int
         var theme: String, isNight: Bool
+        var skyMode: String?
+        var liveActivityOn: Bool?
     }
     struct HabitDTO: Codable {
         var id: UUID, name: String, pillar: Int, kind: String, focusMinutes: Int
@@ -69,7 +71,7 @@ enum BackupService {
                            pillarNames: p.pillarNames, pillarHints: p.pillarHints,
                            workMinutes: p.workMinutes, breakMinutes: p.breakMinutes, rounds: p.rounds,
                            reminderOn: p.reminderOn, reminderHour: p.reminderHour, reminderMinute: p.reminderMinute,
-                           theme: p.theme, isNight: p.isNight),
+                           theme: p.theme, isNight: p.isNight, skyMode: p.skyMode, liveActivityOn: p.liveActivityOn),
             habits: habits.map { .init(id: $0.id, name: $0.name, pillar: $0.pillar, kind: $0.kindRaw, focusMinutes: $0.focusMinutes,
                                        schedule: $0.scheduleRaw, n: $0.scheduleN, startKey: $0.startKey, sortOrder: $0.sortOrder,
                                        doneKeys: $0.doneKeys.sorted(), createdAt: $0.createdAt) },
@@ -98,6 +100,8 @@ enum BackupService {
         p.workMinutes = d.workMinutes; p.breakMinutes = d.breakMinutes; p.rounds = d.rounds
         p.reminderOn = d.reminderOn; p.reminderHour = d.reminderHour; p.reminderMinute = d.reminderMinute
         p.theme = d.theme; p.isNight = d.isNight
+        p.skyMode = d.skyMode ?? "auto"
+        p.liveActivityOn = d.liveActivityOn ?? true
         context.insert(p)
 
         for h in file.habits {
