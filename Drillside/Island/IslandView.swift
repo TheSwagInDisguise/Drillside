@@ -8,7 +8,8 @@ struct IslandView: View {
     @Environment(\.scenePhase) private var scenePhase
     @Environment(Router.self) private var router
     @Environment(ToastCenter.self) private var toasts
-    @Query(sort: \Habit.sortOrder) private var habits: [Habit]
+    @Query(sort: \Habit.sortOrder) private var allHabits: [Habit]
+    private var habits: [Habit] { allHabits.filter { !$0.archived } }
     @Query private var placed: [PlacedProp]
     @Query private var sessions: [FocusSession]
     @Query private var logs: [LogEntry]

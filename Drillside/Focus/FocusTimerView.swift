@@ -39,6 +39,7 @@ struct FocusTimerView: View {
                 LiveActivityController.shared.update(timer)
             }
             if crossed && !timer.finished {
+                FocusSessionStore.save(timer)
                 LiveActivityController.shared.update(timer)
                 toasts.show(timer.phase == .rest ? "☕ Break: stand up, stretch, drink water" : "⛏️ Round \(timer.round): lock in")
             }
@@ -48,7 +49,9 @@ struct FocusTimerView: View {
         }
         .onChange(of: scenePhase) { _, phase in
             if phase == .active { timer.tick(Date()) }
+            if !timer.finished { FocusSessionStore.save(timer) }
         }
+        .onAppear(perform: resumeIfRestored)
         .sensoryFeedback(.increase, trigger: bump)
         .sensoryFeedback(.success, trigger: timer.finished)
     }
@@ -269,6 +272,24 @@ struct FocusTimerView: View {
             Notifier.scheduleFocusBoundaries(timer.upcomingBoundaries())
             LiveActivityController.shared.update(timer)
         }
+        FocusSessionStore.save(timer)
+    }
+
+    /// A session restored after the app was terminated: pay out if it ended meanwhile, otherwise re-attach.
+    private func resumeIfRestored() {
+        guard timer.started else { return }
+        timer.tick(Date())
+        if timer.finished {
+            commit()
+            return
+        }
+        if profile.liveActivityOn {
+            LiveActivityController.shared.start(for: timer, pillarName: pillarName)
+        }
+        if timer.running {
+            Notifier.scheduleFocusBoundaries(timer.upcomingBoundaries())
+        }
+        toasts.show("⏱ Picked up your focus session where it left off")
     }
 
     private func endEarly() {
@@ -287,6 +308,7 @@ struct FocusTimerView: View {
     private func commit() {
         guard !committed else { return }
         committed = true
+        FocusSessionStore.clear()
         Notifier.cancelFocus()
         LiveActivityController.shared.finish(timer)
         let minutes = timer.earnedMinutes

@@ -6,7 +6,11 @@ struct DrillView: View {
     @Environment(\.modelContext) private var context
     @Environment(Router.self) private var router
     @Environment(ToastCenter.self) private var toasts
-    @Query(sort: \Habit.sortOrder) private var habits: [Habit]
+    @Query(sort: \Habit.sortOrder) private var allHabits: [Habit]
+    private var habits: [Habit] { allHabits.filter { !$0.archived } }
+    private var archivedHabits: [Habit] { allHabits.filter(\.archived) }
+    @State private var pendingDelete: Habit?
+    @State private var showArchived = false
 
     @State private var selectedDay = Day.today
     @State private var editing: Habit?
@@ -46,8 +50,36 @@ struct DrillView: View {
                             .frame(maxWidth: .infinity)
                     }
                 } footer: {
-                    Text("Tap a habit to start a focus timer · swipe for edit/delete · Edit to reorder")
+                    Text("Tap a habit to start a focus timer · swipe to edit, archive or delete · Edit to reorder")
                         .frame(maxWidth: .infinity)
+                }
+
+                if !archivedHabits.isEmpty {
+                    Section {
+                        DisclosureGroup(isExpanded: $showArchived) {
+                            ForEach(archivedHabits) { h in
+                                HStack(spacing: 10) {
+                                    PillarBadge(pillar: h.pillar, name: profile.pillarName(h.pillar), size: 24)
+                                    VStack(alignment: .leading, spacing: 1) {
+                                        Text(h.name).font(.system(size: 15, weight: .semibold, design: .rounded))
+                                        Text("Archived \(h.archivedAt?.formatted(date: .abbreviated, time: .omitted) ?? "") · \(h.doneKeys.count) check-offs kept")
+                                            .font(.system(size: 12)).foregroundStyle(.secondary)
+                                    }
+                                    Spacer()
+                                    Button("Restore") { unarchive(h) }
+                                        .buttonStyle(.bordered).tint(Theme.good).controlSize(.small)
+                                }
+                                .swipeActions(edge: .trailing) {
+                                    Button(role: .destructive) { pendingDelete = h } label: { Label("Delete", systemImage: "trash") }
+                                }
+                            }
+                        } label: {
+                            Label("Archived (\(archivedHabits.count))", systemImage: "archivebox")
+                                .font(.system(size: 15, weight: .semibold, design: .rounded))
+                        }
+                    } footer: {
+                        Text("Archived habits stay in your heatmap and trends but are no longer due.")
+                    }
                 }
             }
             .listStyle(.insetGrouped)
@@ -66,6 +98,18 @@ struct DrillView: View {
                 HabitEditor(profile: profile, habit: nil, habits: habits)
             }
             .sensoryFeedback(.success, trigger: checkTick)
+            .confirmationDialog(pendingDelete.map { "Delete “\($0.name)”?" } ?? "Delete habit?",
+                                isPresented: Binding(get: { pendingDelete != nil }, set: { if !$0 { pendingDelete = nil } }),
+                                titleVisibility: .visible) {
+                if let h = pendingDelete, !h.archived {
+                    Button("Archive instead (keep history)") { archive(h) }
+                }
+                Button("Delete with all history", role: .destructive) {
+                    if let h = pendingDelete { delete(h) }
+                }
+            } message: {
+                Text("Deleting removes \(pendingDelete?.doneKeys.count ?? 0) check-offs from your stats. Archiving hides the habit but keeps them.")
+            }
             .onAppear { if !Day.canEdit(selectedDay) { selectedDay = today } }
         }
     }
@@ -150,13 +194,15 @@ struct DrillView: View {
                          onToggle: { toggle(h) },
                          onFocus: { startTimer(h) })
                 .swipeActions(edge: .trailing) {
-                    Button(role: .destructive) { delete(h) } label: { Label("Delete", systemImage: "trash") }
+                    Button { pendingDelete = h } label: { Label("Delete", systemImage: "trash") }.tint(.red)
+                    Button { archive(h) } label: { Label("Archive", systemImage: "archivebox") }.tint(.orange)
                     Button { editing = h } label: { Label("Edit", systemImage: "pencil") }.tint(.blue)
                 }
                 .contextMenu {
                     Button { editing = h } label: { Label("Edit", systemImage: "pencil") }
                     Button { startTimer(h) } label: { Label("Start focus timer", systemImage: "timer") }
-                    Button(role: .destructive) { delete(h) } label: { Label("Delete", systemImage: "trash") }
+                    Button { archive(h) } label: { Label("Archive", systemImage: "archivebox") }
+                    Button(role: .destructive) { pendingDelete = h } label: { Label("Delete…", systemImage: "trash") }
                 }
             }
             .onMove { from, to in
@@ -207,9 +253,23 @@ struct DrillView: View {
     }
 
     private func delete(_ h: Habit) {
+        pendingDelete = nil
         context.delete(h)
         try? context.save()
         toasts.show("Habit deleted")
+    }
+
+    private func archive(_ h: Habit) {
+        pendingDelete = nil
+        Game.archive(h)
+        try? context.save()
+        toasts.show("📦 “\(h.name)” archived. History kept.")
+    }
+
+    private func unarchive(_ h: Habit) {
+        Game.unarchive(h, habits: habits)
+        try? context.save()
+        toasts.show("“\(h.name)” is back in \(profile.pillarName(h.pillar))")
     }
 }
 

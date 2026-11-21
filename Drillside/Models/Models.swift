@@ -109,6 +109,11 @@ final class Habit {
     var sortOrder: Int = 0
     var doneKeys: [String] = []
     var createdAt: Date = Date()
+    /// Archived habits are hidden from DRILL but keep their history in stats (added in schema 1.3.0).
+    var archived: Bool = false
+    var archivedAt: Date?
+    /// Past archived periods as "yyyy-MM-dd..yyyy-MM-dd"; those days are never due.
+    var pauses: [String] = []
 
     init(name: String, pillar: Int, kind: HabitKind, focusMinutes: Int, schedule: ScheduleKind, n: Int, startKey: String, sortOrder: Int) {
         self.id = UUID()
@@ -135,7 +140,9 @@ final class Habit {
     }
 
     var rules: HabitRules {
-        HabitRules(schedule: schedule, n: scheduleN, startKey: startKey, done: Set(doneKeys))
+        HabitRules(schedule: schedule, n: scheduleN, startKey: startKey, done: Set(doneKeys),
+                   endKey: archived ? archivedAt.map(Day.key) ?? Day.today : nil,
+                   pauses: HabitRules.parsePauses(pauses))
     }
 
     func isDone(_ key: String) -> Bool { doneKeys.contains(key) }

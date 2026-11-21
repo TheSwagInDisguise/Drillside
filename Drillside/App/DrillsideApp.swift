@@ -6,12 +6,9 @@ struct DrillsideApp: App {
     let container: ModelContainer
 
     init() {
-        let schema = Schema(AppSchema.models)
         // Local-only store: no CloudKit, no App Group, so no entitlements are required.
-        let config = ModelConfiguration("Drillside", schema: schema, isStoredInMemoryOnly: false,
-                                        allowsSave: true, groupContainer: .none, cloudKitDatabase: .none)
         do {
-            container = try ModelContainer(for: schema, configurations: [config])
+            container = try Store.makeContainer()
         } catch {
             fatalError("Could not open the local database: \(error)")
         }

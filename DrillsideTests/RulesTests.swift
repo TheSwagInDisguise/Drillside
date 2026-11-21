@@ -1,4 +1,5 @@
 import XCTest
+import SwiftData
 @testable import Drillside
 
 final class DayTests: XCTestCase {
@@ -193,5 +194,108 @@ final class SkyClockTests: XCTestCase {
         XCTAssertEqual(SkyClock.resolved(mode: .night, at: Date()).night, 1)
         XCTAssertEqual(SkyClock.Mode.auto.next, .day)
         XCTAssertEqual(SkyClock.Mode.night.next, .auto)
+    }
+}
+
+final class ArchiveTests: XCTestCase {
+    func testArchivedHabitStopsBeingDueButKeepsHistory() {
+        let r = HabitRules(schedule: .daily, n: 1, startKey: "2026-11-01", done: ["2026-11-10", "2026-11-11"], endKey: "2026-11-15")
+        XCTAssertTrue(r.isDue("2026-11-14"))
+        XCTAssertFalse(r.isDue("2026-11-15"))
+        XCTAssertFalse(r.isDue("2026-12-01"))
+        XCTAssertEqual(Stats.dayRatio([r], "2026-11-10"), 1, accuracy: 0.001)
+        XCTAssertEqual(Stats.dayRatio([r], "2026-11-20"), 0, accuracy: 0.001) // not due → not counted as missed
+    }
+
+    func testPausesAreSkippedNotMissed() {
+        let pauses = HabitRules.parsePauses(["2026-11-05..2026-11-08", "bad"])
+        XCTAssertEqual(pauses.count, 1)
+        let r = HabitRules(schedule: .daily, n: 1, startKey: "2026-11-01",
+                           done: ["2026-11-03", "2026-11-04", "2026-11-09", "2026-11-10"], pauses: pauses)
+        XCTAssertFalse(r.isDue("2026-11-06"))
+        XCTAssertEqual(r.streak("2026-11-10"), 4) // 10, 9, (5–8 paused), 4, 3
+    }
+}
+
+final class FocusSessionStoreTests: XCTestCase {
+    func testSnapshotRoundTripKeepsProgress() throws {
+        let defaults = UserDefaults(suiteName: "test-\(UUID().uuidString)")!
+        let t0 = Date().addingTimeInterval(-10 * 60)
+        let timer = FocusTimer(title: "Deep work", pillar: 4, habitID: UUID(), work: 25, rest: 5, rounds: 2)
+        timer.start(at: t0)
+        FocusSessionStore.save(timer, defaults: defaults)
+
+        let restored = try XCTUnwrap(FocusSessionStore.load(defaults: defaults))
+        XCTAssertEqual(restored.snapshot, timer.snapshot)
+        restored.tick(Date())
+        XCTAssertEqual(restored.earnedMinutes, 10)
+        XCTAssertTrue(restored.running)
+
+        FocusSessionStore.clear(defaults: defaults)
+        XCTAssertNil(FocusSessionStore.load(defaults: defaults))
+    }
+
+    func testRestoredSessionThatEndedMeanwhileIsFinished() throws {
+        let defaults = UserDefaults(suiteName: "test-\(UUID().uuidString)")!
+        let timer = FocusTimer(title: "Quick", pillar: 0, habitID: nil, work: 25, rest: 5, rounds: 1)
+        timer.start(at: Date().addingTimeInterval(-40 * 60))
+        FocusSessionStore.save(timer, defaults: defaults)
+        let restored = try XCTUnwrap(FocusSessionStore.load(defaults: defaults))
+        restored.tick(Date())
+        XCTAssertTrue(restored.finished)
+        XCTAssertTrue(restored.completed)
+        XCTAssertEqual(restored.earnedMinutes, 25)
+    }
+}
+
+final class AutoBackupTests: XCTestCase {
+    func testDueWeeklyAndOnVersionChange() {
+        let now = Date()
+        XCTAssertTrue(AutoBackup.isDue(now: now, last: nil, lastVersion: nil, currentVersion: "1.3.0 (5)"))
+        XCTAssertFalse(AutoBackup.isDue(now: now, last: now.addingTimeInterval(-3600), lastVersion: "1.3.0 (5)", currentVersion: "1.3.0 (5)"))
+        XCTAssertTrue(AutoBackup.isDue(now: now, last: now.addingTimeInterval(-8 * 86400), lastVersion: "1.3.0 (5)", currentVersion: "1.3.0 (5)"))
+        XCTAssertTrue(AutoBackup.isDue(now: now, last: now.addingTimeInterval(-3600), lastVersion: "1.2.0 (3)", currentVersion: "1.3.0 (5)"))
+    }
+
+    func testPruneKeepsNewest() {
+        let names = (1...11).map { String(format: "drillside-2026-11-%02d-120000.json", $0) } + ["notes.txt", "other.json"]
+        let prune = AutoBackup.filesToPrune(names, keep: 8)
+        XCTAssertEqual(prune.count, 3)
+        XCTAssertTrue(prune.contains("drillside-2026-11-01-120000.json"))
+        XCTAssertFalse(prune.contains("drillside-2026-11-11-120000.json"))
+        XCTAssertFalse(prune.contains("notes.txt"))
+    }
+}
+
+final class MigrationTests: XCTestCase {
+    /// A store written with the frozen v1.2.0 schema must open with the migration plan and keep its data.
+    func testV1StoreMigratesToLatest() throws {
+        let url = FileManager.default.temporaryDirectory.appendingPathComponent("migration-\(UUID().uuidString).store")
+        defer { try? FileManager.default.removeItem(at: url) }
+        do {
+            let schema = Schema(versionedSchema: SchemaV1.self)
+            let container = try ModelContainer(for: schema, configurations: [ModelConfiguration(schema: schema, url: url)])
+            let ctx = ModelContext(container)
+            let habit = SchemaV1.Habit(name: "Old habit")
+            habit.doneKeys = ["2026-11-01", "2026-11-02"]
+            ctx.insert(habit)
+            let profile = SchemaV1.Profile()
+            profile.shells = 321
+            ctx.insert(profile)
+            ctx.insert(SchemaV1.LogEntry(dayKey: "2026-11-02"))
+            try ctx.save()
+        }
+        let latest = Schema(versionedSchema: DrillsideSchemaLatest.self)
+        let container = try ModelContainer(for: latest, migrationPlan: DrillsideMigrationPlan.self,
+                                           configurations: [ModelConfiguration(schema: latest, url: url)])
+        let ctx = ModelContext(container)
+        let habits = try ctx.fetch(FetchDescriptor<Habit>())
+        XCTAssertEqual(habits.count, 1)
+        XCTAssertEqual(habits.first?.name, "Old habit")
+        XCTAssertEqual(habits.first?.doneKeys.count, 2)
+        XCTAssertEqual(habits.first?.archived, false)
+        XCTAssertEqual(habits.first?.pauses, [])
+        XCTAssertEqual(try ctx.fetch(FetchDescriptor<Profile>()).first?.shells, 321)
+        XCTAssertEqual(try ctx.fetchCount(FetchDescriptor<LogEntry>()), 1)
     }
 }

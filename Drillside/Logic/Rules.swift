@@ -32,12 +32,26 @@ struct HabitRules {
     var n: Int
     var startKey: String
     var done: Set<String>
+    /// First day the habit is no longer due (archived). Days from here on never count as missed.
+    var endKey: String? = nil
+    /// Inclusive day ranges when the habit was archived.
+    var pauses: [ClosedRange<String>] = []
+
+    static func parsePauses(_ raw: [String]) -> [ClosedRange<String>] {
+        raw.compactMap { r in
+            let parts = r.components(separatedBy: "..")
+            guard parts.count == 2, parts[0] <= parts[1] else { return nil }
+            return parts[0]...parts[1]
+        }
+    }
 
     var interval: Int { max(1, n) }
 
     func isDue(_ key: String) -> Bool {
         let d = Day.between(startKey, key)
         if d < 0 { return false }
+        if let end = endKey, Day.between(end, key) >= 0 { return false }
+        if pauses.contains(where: { $0.contains(key) }) { return false }
         if schedule == .every { return d % interval == 0 }
         return true
     }

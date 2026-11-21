@@ -20,6 +20,11 @@ A cozy, gamified habit & focus app for iPhone. Build daily momentum with the **D
   - **Edit Mode:** drag props around, or place items from inventory.
   - **Reset Layout:** refund your shells, or return everything to inventory.
 - **Settings:** pillar names, timer defaults, a local daily reminder, theme, and **JSON export/import** backups.
+- **Safety nets:**
+  - A focus session survives iOS closing the app. It resumes on the next launch, or pays out if it finished in the meantime.
+  - **Automatic weekly backups**, plus one after every app update, go to *Files › On My iPhone › Drillside › Backups*. The newest 8 are kept, and you can restore them from Settings.
+  - Habits can be **archived** instead of deleted, which keeps their history in the stats.
+  - The database uses a **versioned schema and migration plan**. See `Drillside/Models/SchemaVersions.swift` for how to change models safely.
 
 ## Privacy & constraints
 - 100% local: everything is stored in **SwiftData** on device.

@@ -67,6 +67,15 @@ struct HabitEditor: View {
                 }
                 if habit != nil {
                     Section {
+                        Button("Archive (keep history)") {
+                            if let h = habit {
+                                Game.archive(h)
+                                try? context.save()
+                                toasts.show("📦 “\(h.name)” archived. History kept.")
+                            }
+                            dismiss()
+                        }
+                        .tint(.orange)
                         Button("Delete", role: .destructive) { confirmDelete = true }
                     }
                 }
@@ -81,7 +90,7 @@ struct HabitEditor: View {
                         .disabled(name.trimmingCharacters(in: .whitespaces).isEmpty)
                 }
             }
-            .confirmationDialog("Delete this habit and its history?", isPresented: $confirmDelete, titleVisibility: .visible) {
+            .confirmationDialog("Delete this habit and all its history? Archive keeps the history instead.", isPresented: $confirmDelete, titleVisibility: .visible) {
                 Button("Delete", role: .destructive) {
                     if let h = habit {
                         context.delete(h)

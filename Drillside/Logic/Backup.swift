@@ -20,6 +20,9 @@ struct BackupFile: Codable {
     struct HabitDTO: Codable {
         var id: UUID, name: String, pillar: Int, kind: String, focusMinutes: Int
         var schedule: String, n: Int, startKey: String, sortOrder: Int, doneKeys: [String], createdAt: Date
+        var archived: Bool?
+        var archivedAt: Date?
+        var pauses: [String]?
     }
     struct SessionDTO: Codable {
         var id: UUID, startedAt: Date, dayKey: String, minutes: Int, habitID: UUID?, title: String, completed: Bool
@@ -74,7 +77,8 @@ enum BackupService {
                            theme: p.theme, isNight: p.isNight, skyMode: p.skyMode, liveActivityOn: p.liveActivityOn),
             habits: habits.map { .init(id: $0.id, name: $0.name, pillar: $0.pillar, kind: $0.kindRaw, focusMinutes: $0.focusMinutes,
                                        schedule: $0.scheduleRaw, n: $0.scheduleN, startKey: $0.startKey, sortOrder: $0.sortOrder,
-                                       doneKeys: $0.doneKeys.sorted(), createdAt: $0.createdAt) },
+                                       doneKeys: $0.doneKeys.sorted(), createdAt: $0.createdAt,
+                                       archived: $0.archived, archivedAt: $0.archivedAt, pauses: $0.pauses) },
             sessions: sessions.map { .init(id: $0.id, startedAt: $0.startedAt, dayKey: $0.dayKey, minutes: $0.minutes,
                                            habitID: $0.habitID, title: $0.title, completed: $0.completed) },
             logs: logs.map { .init(dayKey: $0.dayKey, well: $0.well, wrong: $0.wrong, fix: $0.fix, tag: $0.tag, updatedAt: $0.updatedAt) },
@@ -111,6 +115,9 @@ enum BackupService {
             habit.id = h.id
             habit.doneKeys = h.doneKeys
             habit.createdAt = h.createdAt
+            habit.archived = h.archived ?? false
+            habit.archivedAt = h.archivedAt
+            habit.pauses = h.pauses ?? []
             context.insert(habit)
         }
         for s in file.sessions {

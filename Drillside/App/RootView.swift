@@ -45,6 +45,8 @@ struct RootView: View {
 
 struct MainTabs: View {
     @Bindable var profile: Profile
+    @Environment(\.modelContext) private var context
+    @Environment(\.scenePhase) private var scenePhase
     @Environment(Router.self) private var router
     @Environment(ToastCenter.self) private var toasts
 
@@ -65,6 +67,16 @@ struct MainTabs: View {
                 .tag(AppTab.shop)
         }
         .tint(Theme.accent)
+        .task {
+            // Resume (or pay out) a focus session that was running when the app was terminated.
+            if router.timer == nil, let restored = FocusSessionStore.load() {
+                router.timer = restored
+            }
+            AutoBackup.runIfDue(context: context)
+        }
+        .onChange(of: scenePhase) { _, phase in
+            if phase == .active { AutoBackup.runIfDue(context: context) }
+        }
         .overlay { ToastOverlay().allowsHitTesting(!toasts.items.isEmpty) }
         .fullScreenCover(item: $router.timer) { timer in
             FocusTimerView(timer: timer, profile: profile)

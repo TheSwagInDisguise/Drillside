@@ -33,6 +33,21 @@ enum Game {
         return pillar * 1000 + (inPillar.map { $0.sortOrder % 1000 }.max() ?? -1) + 1
     }
 
+    static func archive(_ habit: Habit) {
+        habit.archived = true
+        habit.archivedAt = Date()
+    }
+
+    /// Restores a habit. The days it spent archived are recorded as a pause so they never count as missed.
+    static func unarchive(_ habit: Habit, habits: [Habit], today: String = Day.today) {
+        if let since = habit.archivedAt.map(Day.key), Day.between(since, today) > 0 {
+            habit.pauses.append("\(since)..\(Day.add(today, -1))")
+        }
+        habit.archived = false
+        habit.archivedAt = nil
+        habit.sortOrder = nextSortOrder(pillar: habit.pillar, habits: habits)
+    }
+
     static func reorder(_ ordered: [Habit]) {
         for (i, h) in ordered.enumerated() {
             h.sortOrder = h.pillar * 1000 + i

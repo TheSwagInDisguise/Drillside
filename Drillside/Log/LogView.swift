@@ -41,7 +41,7 @@ struct LogView: View {
                     switch mode {
                     case .timeline: TimelineList(logs: Array(logs.prefix(30)), rules: rules, focusByDay: focusByDay)
                     case .heatmap: HeatmapView(rules: rules, focusByDay: focusByDay, logs: logs, habits: habits)
-                    case .trends: TrendsView(profile: profile, habits: habits, focusByDay: focusByDay, logs: logs)
+                    case .trends: TrendsView(profile: profile, habits: habits.filter { !$0.archived }, focusByDay: focusByDay, logs: logs)
                     }
                 }
                 .padding(.horizontal, 16)

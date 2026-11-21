@@ -5,7 +5,7 @@ import Observation
 /// from timestamps rather than counted ticks.
 @Observable
 final class FocusTimer: Identifiable {
-    enum Phase { case work, rest }
+    enum Phase: String, Codable { case work, rest }
 
     let id = UUID()
     let title: String
@@ -45,6 +45,37 @@ final class FocusTimer: Identifiable {
     }
 
     var phaseEndDate: Date { phaseEnd }
+
+    // MARK: Persistence (survives the app being terminated mid-session)
+
+    struct Snapshot: Codable, Equatable {
+        var title: String, pillar: Int, habitID: UUID?
+        var workMinutes: Int, breakMinutes: Int, rounds: Int
+        var round: Int, phase: Phase
+        var started: Bool, running: Bool, finished: Bool, completed: Bool
+        var startedAt: Date, phaseEnd: Date, pausedRemaining: TimeInterval, bankedWork: TimeInterval, segmentStart: Date
+    }
+
+    var snapshot: Snapshot {
+        Snapshot(title: title, pillar: pillar, habitID: habitID, workMinutes: workMinutes, breakMinutes: breakMinutes, rounds: rounds,
+                 round: round, phase: phase, started: started, running: running, finished: finished, completed: completed,
+                 startedAt: startedAt, phaseEnd: phaseEnd, pausedRemaining: pausedRemaining, bankedWork: bankedWork, segmentStart: segmentStart)
+    }
+
+    convenience init(snapshot s: Snapshot) {
+        self.init(title: s.title, pillar: s.pillar, habitID: s.habitID, work: s.workMinutes, rest: s.breakMinutes, rounds: s.rounds)
+        round = s.round
+        phase = s.phase
+        started = s.started
+        running = s.running
+        finished = s.finished
+        completed = s.completed
+        startedAt = s.startedAt
+        phaseEnd = s.phaseEnd
+        pausedRemaining = s.pausedRemaining
+        bankedWork = s.bankedWork
+        segmentStart = s.segmentStart
+    }
 
     var phaseLength: TimeInterval { TimeInterval((phase == .work ? workMinutes : breakMinutes) * 60) }
 
@@ -155,5 +186,30 @@ final class FocusTimer: Identifiable {
             }
         }
         return list
+    }
+}
+
+/// Keeps the in-flight focus session on disk so it can be resumed (or paid out) after a relaunch.
+enum FocusSessionStore {
+    private static let key = "focus.activeSession.v1"
+
+    static func save(_ timer: FocusTimer, defaults: UserDefaults = .standard) {
+        guard timer.started else { return }
+        if let data = try? JSONEncoder().encode(timer.snapshot) { defaults.set(data, forKey: key) }
+    }
+
+    static func load(defaults: UserDefaults = .standard) -> FocusTimer? {
+        guard let data = defaults.data(forKey: key),
+              let snap = try? JSONDecoder().decode(FocusTimer.Snapshot.self, from: data) else { return nil }
+        // Ignore anything older than a day; it's long finished and would only confuse.
+        guard Date().timeIntervalSince(snap.startedAt) < 24 * 3600 else {
+            clear(defaults: defaults)
+            return nil
+        }
+        return FocusTimer(snapshot: snap)
+    }
+
+    static func clear(defaults: UserDefaults = .standard) {
+        defaults.removeObject(forKey: key)
     }
 }

@@ -12,6 +12,8 @@ struct SettingsView: View {
     @State private var showImporter = false
     @State private var confirmReset = false
     @State private var pendingImport: Data?
+    @AppStorage(AutoBackup.enabledKey) private var autoBackupOn = true
+    @State private var backups: [AutoBackup.Entry] = []
 
     var body: some View {
         NavigationStack {
@@ -187,21 +189,62 @@ struct SettingsView: View {
     }
 
     private var backupSection: some View {
-        Section {
-            Button {
-                do {
-                    exportDoc = BackupDocument(data: try BackupService.makeBackup(context: context))
-                    showExporter = true
-                } catch {
-                    toasts.show("Couldn’t create the backup")
+        Group {
+            Section {
+                Toggle("Weekly automatic backup", isOn: $autoBackupOn)
+                    .tint(Theme.good)
+                LabeledContent("Last backup", value: AutoBackup.lastBackup.map { $0.formatted(.relative(presentation: .named)) } ?? "Never")
+                Button {
+                    do {
+                        try AutoBackup.backupNow(context: context)
+                        backups = AutoBackup.list()
+                        toasts.show("📦 Backup saved to Files")
+                    } catch {
+                        toasts.show("Couldn’t create the backup")
+                    }
+                } label: { Label("Back up now", systemImage: "externaldrive.badge.checkmark") }
+                if let url = URL(string: "shareddocuments://" + AutoBackup.folder.path) {
+                    Button {
+                        UIApplication.shared.open(url)
+                    } label: { Label("Show in Files", systemImage: "folder") }
                 }
-            } label: { Label("Export JSON backup", systemImage: "square.and.arrow.up") }
-            Button { showImporter = true } label: { Label("Import JSON backup", systemImage: "square.and.arrow.down") }
-            Button(role: .destructive) { confirmReset = true } label: { Label("Erase all data", systemImage: "trash") }
-        } header: {
-            Text("Backup")
-        } footer: {
-            Text("Backups are plain JSON files you can keep in Files, iCloud Drive or anywhere you like.")
+                ForEach(backups.prefix(4)) { entry in
+                    Button {
+                        if let data = try? Data(contentsOf: entry.url) { pendingImport = data } else { toasts.show("Couldn’t read that backup") }
+                    } label: {
+                        HStack {
+                            Image(systemName: "clock.arrow.circlepath")
+                            VStack(alignment: .leading, spacing: 1) {
+                                Text("Restore \(entry.date.formatted(date: .abbreviated, time: .shortened))")
+                                Text(ByteCountFormatter.string(fromByteCount: Int64(entry.size), countStyle: .file))
+                                    .font(.caption).foregroundStyle(.secondary)
+                            }
+                        }
+                    }
+                }
+            } header: {
+                Text("Automatic backups")
+            } footer: {
+                Text("Saved weekly and after every app update to Files › On My iPhone › Drillside › Backups. The newest \(AutoBackup.keep) are kept. They stay on your device and survive a reinstall only if you copy them elsewhere (e.g. iCloud Drive) — the Files app can do that.")
+            }
+            .onAppear { backups = AutoBackup.list() }
+
+            Section {
+                Button {
+                    do {
+                        exportDoc = BackupDocument(data: try BackupService.makeBackup(context: context))
+                        showExporter = true
+                    } catch {
+                        toasts.show("Couldn’t create the backup")
+                    }
+                } label: { Label("Export JSON backup", systemImage: "square.and.arrow.up") }
+                Button { showImporter = true } label: { Label("Import JSON backup", systemImage: "square.and.arrow.down") }
+                Button(role: .destructive) { confirmReset = true } label: { Label("Erase all data", systemImage: "trash") }
+            } header: {
+                Text("Manual backup")
+            } footer: {
+                Text("Backups are plain JSON files you can keep in Files, iCloud Drive or anywhere you like.")
+            }
         }
     }
 
