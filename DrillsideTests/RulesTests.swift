@@ -113,7 +113,7 @@ final class EconomyTests: XCTestCase {
         XCTAssertGreaterThanOrEqual(PropType.allCases.count, 60)
         for cat in PropCategory.allCases { XCTAssertFalse(PropType.items(in: cat).isEmpty, "\(cat) is empty") }
         XCTAssertEqual(Set(PropType.allCases.map(\.name)).count, PropType.allCases.count, "names must be unique")
-        for p in PropType.allCases {
+        for p in PropType.allCases where !p.isExclusive {
             XCTAssertGreaterThan(p.price, 0)
             XCTAssertGreaterThanOrEqual(p.unlockLevel, 1)
             if p.isWalkable { XCTAssertTrue(p.isFlat) }
@@ -297,5 +297,96 @@ final class MigrationTests: XCTestCase {
         XCTAssertEqual(habits.first?.pauses, [])
         XCTAssertEqual(try ctx.fetch(FetchDescriptor<Profile>()).first?.shells, 321)
         XCTAssertEqual(try ctx.fetchCount(FetchDescriptor<LogEntry>()), 1)
+    }
+}
+
+
+final class V14Tests: XCTestCase {
+    func testV2StoreMigratesToLatest() throws {
+        let url = FileManager.default.temporaryDirectory.appendingPathComponent("migration2-\(UUID().uuidString).store")
+        defer { try? FileManager.default.removeItem(at: url) }
+        do {
+            let schema = Schema(versionedSchema: SchemaV2.self)
+            let container = try ModelContainer(for: schema, configurations: [ModelConfiguration(schema: schema, url: url)])
+            let ctx = ModelContext(container)
+            let habit = SchemaV2.Habit(name: "Archived reader")
+            habit.archived = true
+            habit.pauses = ["2026-11-01..2026-11-03"]
+            ctx.insert(habit)
+            let profile = SchemaV2.Profile()
+            profile.skyMode = "night"
+            ctx.insert(profile)
+            try ctx.save()
+        }
+        let latest = Schema(versionedSchema: DrillsideSchemaLatest.self)
+        let container = try ModelContainer(for: latest, migrationPlan: DrillsideMigrationPlan.self,
+                                           configurations: [ModelConfiguration(schema: latest, url: url)])
+        let ctx = ModelContext(container)
+        let h = try XCTUnwrap(try ctx.fetch(FetchDescriptor<Habit>()).first)
+        XCTAssertTrue(h.archived)
+        XCTAssertEqual(h.pauses, ["2026-11-01..2026-11-03"])
+        XCTAssertEqual(h.unit, "")
+        XCTAssertEqual(h.amounts, [])
+        let p = try XCTUnwrap(try ctx.fetch(FetchDescriptor<Profile>()).first)
+        XCTAssertEqual(p.skyMode, "night")
+        XCTAssertEqual(p.islandTheme, "classic")
+        XCTAssertEqual(p.ownedThemes, ["classic"])
+    }
+
+    func testDayValues() {
+        var list: [String] = []
+        list = DayValues.set(list, "2026-11-20", "32")
+        list = DayValues.set(list, "2026-11-21", "note with = sign")
+        list = DayValues.set(list, "2026-11-20", "40")
+        XCTAssertEqual(DayValues.get(list, "2026-11-20"), "40")
+        XCTAssertEqual(DayValues.get(list, "2026-11-21"), "note with = sign")
+        list = DayValues.set(list, "2026-11-20", nil)
+        XCTAssertNil(DayValues.get(list, "2026-11-20"))
+        XCTAssertEqual(list.count, 1)
+    }
+
+    func testAchievementsProgress() {
+        var s = AchievementStats()
+        s.focusMinutes = 650
+        s.bestStreak = 7
+        s.level = 10
+        XCTAssertTrue(Achievement.focus10h.isMet(s))
+        XCTAssertFalse(Achievement.focus100h.isMet(s))
+        XCTAssertTrue(Achievement.streak7.isMet(s))
+        XCTAssertEqual(Achievement.level10.reward, .prop(.rainbow))
+        XCTAssertTrue(Achievement.allCases.allSatisfy { !$0.title.isEmpty && !$0.detail.isEmpty })
+        for case .prop(let p) in Achievement.allCases.map(\.reward) { XCTAssertTrue(p.isExclusive) }
+    }
+
+    func testWeeklyReviewWeek() {
+        XCTAssertEqual(WeeklyReview.weekStart(today: "2026-11-20"), "2026-11-16") // Friday → this week
+        XCTAssertEqual(WeeklyReview.weekStart(today: "2026-11-18"), "2026-11-09") // Wednesday → last week
+        XCTAssertEqual(WeeklyReview.days(today: "2026-11-18").count, 7)
+        XCTAssertEqual(WeeklyReview.days(today: "2026-11-21").count, 6)
+    }
+
+    func testSeasonsAndThemes() {
+        let cal = Calendar(identifier: .gregorian)
+        let ams = TimeZone(identifier: "Europe/Amsterdam")!
+        let syd = TimeZone(identifier: "Australia/Sydney")!
+        let jan = cal.date(from: DateComponents(timeZone: ams, year: 2026, month: 1, day: 15, hour: 12))!
+        XCTAssertEqual(Season.current(at: jan, timeZone: ams, calendar: cal), .winter)
+        XCTAssertEqual(Season.current(at: jan, timeZone: syd, calendar: cal), .summer)
+        XCTAssertEqual(IslandTheme.classic.price, 0)
+        XCTAssertTrue(IslandTheme.allCases.dropFirst().allSatisfy { $0.price > 0 })
+        XCTAssertFalse(PropCategory.shop.contains(.trophies))
+    }
+
+    func testSynthStaysInRange() {
+        let synth = SoundSynth()
+        for kind in FocusSound.allCases {
+            synth.kind = kind
+            synth.targetGain = 1
+            synth.chimeT = 0
+            for _ in 0..<20_000 {
+                let v = synth.next()
+                XCTAssertTrue(v.isFinite && v >= -1 && v <= 1)
+            }
+        }
     }
 }

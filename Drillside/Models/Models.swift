@@ -27,6 +27,19 @@ final class Profile {
     /// Show running focus sessions in the Dynamic Island / Lock Screen.
     var liveActivityOn: Bool = true
     var createdAt: Date = Date()
+    // v1.4.0 (schema V3)
+    var achievements: [String] = []
+    /// One sentence the weekly review asks for, shown on DRILL all week.
+    var weeklyFocus: String = ""
+    /// Week-start keys ("yyyy-MM-dd" Mondays) for which a weekly review was completed.
+    var reviewWeeks: [String] = []
+    /// FocusSound raw value.
+    var focusSound: String = "off"
+    var soundVolume: Double = 0.6
+    var chimeOn: Bool = true
+    var seasonalOn: Bool = true
+    var islandTheme: String = "classic"
+    var ownedThemes: [String] = ["classic"]
 
     init() {
         level = 1
@@ -48,6 +61,15 @@ final class Profile {
         skyMode = "auto"
         liveActivityOn = true
         createdAt = Date()
+        achievements = []
+        weeklyFocus = ""
+        reviewWeeks = []
+        focusSound = "off"
+        soundVolume = 0.6
+        chimeOn = true
+        seasonalOn = true
+        islandTheme = "classic"
+        ownedThemes = ["classic"]
     }
 
     func pillarName(_ i: Int) -> String {
@@ -114,6 +136,15 @@ final class Habit {
     var archivedAt: Date?
     /// Past archived periods as "yyyy-MM-dd..yyyy-MM-dd"; those days are never due.
     var pauses: [String] = []
+    // v1.4.0: quantity tracking ("Read 20 pages" → log 32) and per-day notes
+    /// Unit label, e.g. "pages". Empty = plain check-off habit.
+    var unit: String = ""
+    /// Daily target amount (0 = no target).
+    var target: Int = 0
+    /// "yyyy-MM-dd=amount" entries.
+    var amounts: [String] = []
+    /// "yyyy-MM-dd=note" entries.
+    var notes: [String] = []
 
     init(name: String, pillar: Int, kind: HabitKind, focusMinutes: Int, schedule: ScheduleKind, n: Int, startKey: String, sortOrder: Int) {
         self.id = UUID()
@@ -146,6 +177,22 @@ final class Habit {
     }
 
     func isDone(_ key: String) -> Bool { doneKeys.contains(key) }
+
+    var tracksAmount: Bool { !unit.trimmingCharacters(in: .whitespaces).isEmpty }
+
+    func amount(on key: String) -> Int? { DayValues.get(amounts, key).flatMap(Int.init) }
+    func note(on key: String) -> String? { DayValues.get(notes, key) }
+
+    func setAmount(_ value: Int?, on key: String) { amounts = DayValues.set(amounts, key, value.map(String.init)) }
+    func setNote(_ text: String?, on key: String) {
+        let t = text?.trimmingCharacters(in: .whitespacesAndNewlines)
+        notes = DayValues.set(notes, key, (t?.isEmpty ?? true) ? nil : t)
+    }
+
+    /// Sum of logged amounts over the `days` days ending at `key` (inclusive).
+    func total(days: Int, endingAt key: String) -> Int {
+        (0..<days).reduce(0) { $0 + (amount(on: Day.add(key, -$1)) ?? 0) }
+    }
 
     func setDone(_ done: Bool, on key: String) {
         if done {
@@ -217,6 +264,20 @@ struct InventoryItem: Identifiable, Equatable {
     let type: PropType
     let count: Int
     var id: String { type.rawValue }
+}
+
+/// Tiny "key=value" list helpers used for per-day amounts and notes (keeps the schema to plain arrays).
+enum DayValues {
+    static func get(_ list: [String], _ key: String) -> String? {
+        let prefix = key + "="
+        return list.last(where: { $0.hasPrefix(prefix) }).map { String($0.dropFirst(prefix.count)) }
+    }
+
+    static func set(_ list: [String], _ key: String, _ value: String?) -> [String] {
+        var out = list.filter { !$0.hasPrefix(key + "=") }
+        if let value { out.append(key + "=" + value) }
+        return out
+    }
 }
 
 enum AppSchema {

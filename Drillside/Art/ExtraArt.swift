@@ -31,6 +31,10 @@ enum ExtraArt {
         case .cobble: cobble(c, x, y, s)
         case .snow: snow(c, x, y, s, t)
         case .mosaic: mosaic(c, x, y, s)
+        case .pennant: pennant(c, x, y, s, t)
+        case .bell: bell(c, x, y, s, t)
+        case .obelisk: obelisk(c, x, y, s, t)
+        case .rainbow: rainbow(c, x, y, s, t)
         default: break
         }
     }
@@ -488,5 +492,76 @@ enum ExtraArt {
                 c.poly(pts, Color(hex: cols[(r * 2 + col * 3) % cols.count]))
             }
         }
+    }
+
+    // MARK: Trophies
+
+    static func pennant(_ c: GraphicsContext, _ x: CGFloat, _ y: CGFloat, _ s: CGFloat, _ t: CGFloat) {
+        c.groundShadow(x, y, 8 * s)
+        c.ell(x, y, 5 * s, 2.2 * s, Color(hex: 0x8F98A3))
+        c.line(x, y, x, y - 38 * s, Color(hex: 0xC9A227), 1.6 * s)
+        c.ell(x, y - 39 * s, 1.6 * s, 1.6 * s, Color(hex: 0xF2C14E))
+        var flag = Path()
+        let w1: CGFloat = sin(t * 4) * 2 * s, w2: CGFloat = sin(t * 4 + 1.2) * 2.5 * s
+        flag.move(to: P(x, y - 37 * s))
+        flag.addQuadCurve(to: P(x + 18 * s, y - 31 * s + w2), control: P(x + 9 * s, y - 37 * s + w1))
+        flag.addQuadCurve(to: P(x, y - 24 * s), control: P(x + 9 * s, y - 26 * s + w1))
+        flag.closeSubpath()
+        c.fill(flag, with: .color(Color(hex: 0xE5483A)))
+        c.draw(Text("7").font(.system(size: max(1, 6 * s), weight: .black, design: .rounded)).foregroundColor(.white),
+               at: P(x + 6 * s, y - 30.5 * s + w1 * 0.5))
+    }
+
+    static func bell(_ c: GraphicsContext, _ x: CGFloat, _ y: CGFloat, _ s: CGFloat, _ t: CGFloat) {
+        c.groundShadow(x, y, 13 * s)
+        c.rrect(x - 12 * s, y - 32 * s, 3 * s, 32 * s, 1 * s, Ink.trunk)
+        c.rrect(x + 9 * s, y - 32 * s, 3 * s, 32 * s, 1 * s, Ink.trunk)
+        c.poly([P(x - 15 * s, y - 31 * s), P(x + 15 * s, y - 31 * s), P(x, y - 42 * s)], Color(hex: 0xB5523B))
+        var g = c
+        g.translateBy(x: x, y: y - 30 * s)
+        g.rotate(by: .radians(Double(sin(t * 2.2) * 0.15)))
+        var body = Path()
+        body.move(to: P(-3 * s, 1 * s))
+        body.addQuadCurve(to: P(-7 * s, 13 * s), control: P(-5 * s, 6 * s))
+        body.addLine(to: P(7 * s, 13 * s))
+        body.addQuadCurve(to: P(3 * s, 1 * s), control: P(5 * s, 6 * s))
+        body.closeSubpath()
+        g.fill(body, with: .color(Color(hex: 0xF2C14E)))
+        g.rrect(-7.5 * s, 12 * s, 15 * s, 2 * s, 1 * s, Color(hex: 0xD9A22C))
+        g.ell(0, 15 * s, 1.6 * s, 1.6 * s, Color(hex: 0x8A6A1A))
+        g.rrect(-1.5 * s, 3 * s, 1.5 * s, 7 * s, 0.7 * s, Color.white.opacity(0.5))
+    }
+
+    static func obelisk(_ c: GraphicsContext, _ x: CGFloat, _ y: CGFloat, _ s: CGFloat, _ t: CGFloat) {
+        c.groundShadow(x, y, 12 * s)
+        c.isoBox(x, y, 11 * s, 4 * s, top: Color(hex: 0xD6DBE1), left: Color(hex: 0xB4BCC6), right: Color(hex: 0x9AA3AD))
+        c.poly([P(x - 6 * s, y - 4 * s), P(x, y - 1 * s), P(x, y - 44 * s), P(x - 4 * s, y - 42 * s)], Color(hex: 0x3B4A6B))
+        c.poly([P(x, y - 1 * s), P(x + 6 * s, y - 4 * s), P(x + 4 * s, y - 42 * s), P(x, y - 44 * s)], Color(hex: 0x2C3854))
+        c.poly([P(x - 4 * s, y - 42 * s), P(x, y - 44 * s), P(x + 4 * s, y - 42 * s), P(x, y - 50 * s)], Color(hex: 0x7FD3F0))
+        let pulse = Double(0.6 + 0.4 * sin(t * 1.8))
+        for k in 0..<4 {
+            let yy = y - (10 + CGFloat(k) * 8) * s
+            c.line(x - 3.5 * s, yy, x + 3.5 * s, yy - 1 * s, Color(hex: 0x7FD3F0, opacity: pulse), 1 * s)
+        }
+    }
+
+    static func rainbow(_ c: GraphicsContext, _ x: CGFloat, _ y: CGFloat, _ s: CGFloat, _ t: CGFloat) {
+        c.ell(x - 16 * s, y, 6 * s, 3 * s, .white)
+        c.ell(x + 16 * s, y, 6 * s, 3 * s, .white)
+        let g = c.skewed(x, y)
+        let cols: [UInt32] = [0xE5483A, 0xF28C28, 0xFFC93C, 0x6CC24A, 0x5B8DEF, 0xA77BDB]
+        for (i, col) in cols.enumerated() {
+            let r = (19 - CGFloat(i) * 2.2) * s
+            var arc = Path()
+            arc.addArc(center: P(0, 0), radius: r, startAngle: .degrees(180), endAngle: .degrees(360), clockwise: false)
+            g.stroke(arc, with: .color(Color(hex: col)), lineWidth: 2.3 * s)
+        }
+        for k in 0..<3 {
+            let fk = CGFloat(k)
+            let a = Double(0.5 + 0.5 * sin(t * 3 + fk * 2))
+            c.ell(x - 10 * s + fk * 10 * s, y - 24 * s - fk * 2 * s, 1.2 * s, 1.2 * s, Color.white.opacity(a))
+        }
+        c.ell(x - 16 * s, y - 2 * s, 7 * s, 3.5 * s, .white)
+        c.ell(x + 16 * s, y - 2 * s, 7 * s, 3.5 * s, .white)
     }
 }

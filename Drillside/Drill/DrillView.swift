@@ -11,6 +11,7 @@ struct DrillView: View {
     private var archivedHabits: [Habit] { allHabits.filter(\.archived) }
     @State private var pendingDelete: Habit?
     @State private var showArchived = false
+    @State private var checkingIn: Habit?
 
     @State private var selectedDay = Day.today
     @State private var editing: Habit?
@@ -24,6 +25,19 @@ struct DrillView: View {
             List {
                 Section {
                     summary
+                    if !profile.weeklyFocus.isEmpty {
+                        HStack(alignment: .top, spacing: 8) {
+                            Text("🎯")
+                            VStack(alignment: .leading, spacing: 1) {
+                                Text("THIS WEEK’S FOCUS").font(.system(size: 11, weight: .heavy, design: .rounded)).foregroundStyle(.secondary)
+                                Text(profile.weeklyFocus).font(.system(size: 14, weight: .semibold, design: .rounded))
+                            }
+                            Spacer(minLength: 0)
+                        }
+                        .padding(12)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .background(Pillars.color(0).opacity(0.15), in: RoundedRectangle(cornerRadius: 14))
+                    }
                     dateStrip
                     if selectedDay != today {
                         Text("↩︎ **Retro check-off** for \(Day.long(selectedDay)). You can edit up to \(Day.retroWindow) days back.")
@@ -98,6 +112,11 @@ struct DrillView: View {
                 HabitEditor(profile: profile, habit: nil, habits: habits)
             }
             .sensoryFeedback(.success, trigger: checkTick)
+            .sheet(item: $checkingIn) { h in
+                CheckInSheet(habit: h, day: selectedDay, profile: profile) { out in
+                    if let out { celebrate(out) }
+                }
+            }
             .confirmationDialog(pendingDelete.map { "Delete “\($0.name)”?" } ?? "Delete habit?",
                                 isPresented: Binding(get: { pendingDelete != nil }, set: { if !$0 { pendingDelete = nil } }),
                                 titleVisibility: .visible) {
@@ -199,6 +218,9 @@ struct DrillView: View {
                     Button { editing = h } label: { Label("Edit", systemImage: "pencil") }.tint(.blue)
                 }
                 .contextMenu {
+                    Button { checkingIn = h } label: {
+                        Label(h.tracksAmount ? "Log amount & note" : "Add a note for this day", systemImage: "square.and.pencil")
+                    }
                     Button { editing = h } label: { Label("Edit", systemImage: "pencil") }
                     Button { startTimer(h) } label: { Label("Start focus timer", systemImage: "timer") }
                     Button { archive(h) } label: { Label("Archive", systemImage: "archivebox") }
@@ -229,11 +251,21 @@ struct DrillView: View {
     // MARK: Actions
 
     private func toggle(_ h: Habit) {
+        // Amount habits open the check-in sheet so the number can be logged.
+        if h.tracksAmount {
+            guard Day.canEdit(selectedDay) else { return }
+            checkingIn = h
+            return
+        }
         let wasDone = h.isDone(selectedDay)
         let out = Game.toggle(h, day: selectedDay, profile: profile)
         if !out.ok, let m = out.message { toasts.show(m); return }
         try? context.save()
-        if !wasDone {
+        if !wasDone { celebrate(out) }
+    }
+
+    private func celebrate(_ out: Game.Outcome) {
+        do {
             checkTick += 1
             if out.levelsGained > 0 {
                 toasts.levelUp(out.levelsGained, level: profile.level) { router.tab = .shop }
@@ -335,6 +367,11 @@ struct HabitRow: View {
 
     private func subtitle(_ m: HabitMeta, done: Bool) -> String {
         var s = m.label
+        if habit.tracksAmount {
+            let v = habit.amount(on: day) ?? 0
+            s += habit.target > 0 ? " · \(v)/\(habit.target) \(habit.unit)" : (v > 0 ? " · \(v) \(habit.unit)" : "")
+        }
+        if habit.note(on: day) != nil { s += " · 📝" }
         switch habit.schedule {
         case .week:
             s += " · \(m.weekDone)/\(m.weekTarget) this week"

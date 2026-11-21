@@ -6,6 +6,7 @@ import WidgetKit
 struct DrillsideWidgetsBundle: WidgetBundle {
     var body: some Widget {
         FocusLiveActivity()
+        LauncherWidget()
     }
 }
 

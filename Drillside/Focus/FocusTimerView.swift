@@ -42,6 +42,7 @@ struct FocusTimerView: View {
                 FocusSessionStore.save(timer)
                 LiveActivityController.shared.update(timer)
                 toasts.show(timer.phase == .rest ? "☕ Break: stand up, stretch, drink water" : "⛏️ Round \(timer.round): lock in")
+                if profile.chimeOn { FocusSoundPlayer.shared.chime(volume: profile.soundVolume) }
             }
         }
         .onChange(of: timer.finished) { _, done in
@@ -52,6 +53,7 @@ struct FocusTimerView: View {
             if !timer.finished { FocusSessionStore.save(timer) }
         }
         .onAppear(perform: resumeIfRestored)
+        .onDisappear { FocusSoundPlayer.shared.stop() }
         .sensoryFeedback(.increase, trigger: bump)
         .sensoryFeedback(.success, trigger: timer.finished)
     }
@@ -81,7 +83,18 @@ struct FocusTimerView: View {
             .padding(.leading, 5).padding(.trailing, 10).padding(.vertical, 5)
             .background(.white.opacity(0.12), in: RoundedRectangle(cornerRadius: 12))
             Spacer()
-            Color.clear.frame(width: 38, height: 38)
+            Menu {
+                Picker("Focus sound", selection: Binding(get: { FocusSound(rawValue: profile.focusSound) ?? .off },
+                                                          set: { setSound($0) })) {
+                    ForEach(FocusSound.allCases) { Label($0.title, systemImage: $0.icon).tag($0) }
+                }
+            } label: {
+                Image(systemName: (FocusSound(rawValue: profile.focusSound) ?? .off).icon)
+                    .font(.system(size: 15, weight: .bold))
+                    .frame(width: 38, height: 38)
+                    .background(.white.opacity(0.12), in: RoundedRectangle(cornerRadius: 12))
+            }
+            .accessibilityLabel("Focus sound")
         }
         .padding(.top, 6)
     }
@@ -255,6 +268,7 @@ struct FocusTimerView: View {
     private func toggle() {
         if !timer.started {
             timer.start()
+            playAmbient()
             if profile.liveActivityOn {
                 LiveActivityController.shared.start(for: timer, pillarName: pillarName)
             }
@@ -265,14 +279,37 @@ struct FocusTimerView: View {
             }
         } else if timer.running {
             timer.pause()
+            FocusSoundPlayer.shared.stop()
             Notifier.cancelFocus()
             LiveActivityController.shared.update(timer)
         } else {
             timer.resume()
+            playAmbient()
             Notifier.scheduleFocusBoundaries(timer.upcomingBoundaries())
             LiveActivityController.shared.update(timer)
         }
         FocusSessionStore.save(timer)
+    }
+
+    private func playAmbient() {
+        let sound = FocusSound(rawValue: profile.focusSound) ?? .off
+        if sound != .off { FocusSoundPlayer.shared.play(sound, volume: profile.soundVolume) }
+    }
+
+    private func setSound(_ sound: FocusSound) {
+        profile.focusSound = sound.rawValue
+        if timer.running && !timer.finished {
+            FocusSoundPlayer.shared.play(sound, volume: profile.soundVolume)
+        } else if sound != .off {
+            // short preview
+            FocusSoundPlayer.shared.play(sound, volume: profile.soundVolume)
+            Task { @MainActor in
+                try? await Task.sleep(nanoseconds: 2_500_000_000)
+                if !timer.running { FocusSoundPlayer.shared.stop() }
+            }
+        } else {
+            FocusSoundPlayer.shared.stop()
+        }
     }
 
     /// A session restored after the app was terminated: pay out if it ended meanwhile, otherwise re-attach.
@@ -287,6 +324,7 @@ struct FocusTimerView: View {
             LiveActivityController.shared.start(for: timer, pillarName: pillarName)
         }
         if timer.running {
+            playAmbient()
             Notifier.scheduleFocusBoundaries(timer.upcomingBoundaries())
         }
         toasts.show("⏱ Picked up your focus session where it left off")
@@ -311,6 +349,8 @@ struct FocusTimerView: View {
         FocusSessionStore.clear()
         Notifier.cancelFocus()
         LiveActivityController.shared.finish(timer)
+        FocusSoundPlayer.shared.stop()
+        if profile.chimeOn && timer.completed { FocusSoundPlayer.shared.chime(volume: profile.soundVolume) }
         let minutes = timer.earnedMinutes
         let result = Game.commitFocus(minutes: minutes, completed: timer.completed, habitID: timer.habitID, title: timer.title,
                                       startedAt: timer.startedAt, profile: profile, habits: habits, context: context)
@@ -333,7 +373,7 @@ private struct MoleBadge: View {
     var celebrating = false
 
     var body: some View {
-        TimelineView(.animation) { tl in
+        TimelineView(.animation(minimumInterval: 1.0 / 24, paused: false)) { tl in
             Canvas { ctx, size in
                 let t = CGFloat(tl.date.timeIntervalSinceReferenceDate.truncatingRemainder(dividingBy: 1000))
                 let k = size.width / 96

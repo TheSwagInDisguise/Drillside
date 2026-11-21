@@ -28,6 +28,9 @@ final class IslandEngine {
     var props: [PropSnapshot] = []
     var companions: [CompanionType] = []
     var skyMode: SkyClock.Mode = .auto
+    var theme: IslandTheme = .classic
+    var seasonal = true
+    private(set) var season: Season = .current()
     var editing = false
     var placing: PropType?
     var selected: UUID?
@@ -81,6 +84,7 @@ final class IslandEngine {
     private struct Star { var x: CGFloat, y: CGFloat, r: CGFloat, ph: CGFloat }
     private let waves: [Wave]
     private let stars: [Star]
+    private let flakes: [Star]
 
     static let cheers = ["Let’s drill in! ⛏️", "One block at a time 🌱", "You showed up today 💛", "Lock-in time?", "Tiny steps, big island 🏝️", "Proud of you!"]
 
@@ -88,6 +92,7 @@ final class IslandEngine {
         var rng = SeededRandom(seed: 5)
         waves = (0..<34).map { _ in Wave(x: rng.next(), y: rng.next(), len: 10 + rng.next() * 16, ph: rng.next() * 6) }
         stars = (0..<50).map { _ in Star(x: rng.next(), y: rng.next(), r: 0.6 + rng.next() * 1.3, ph: rng.next() * 6) }
+        flakes = (0..<40).map { _ in Star(x: rng.next(), y: rng.next(), r: 0.6 + rng.next() * 0.9, ph: rng.next() * 6) }
     }
 
     // MARK: Geometry
@@ -170,11 +175,12 @@ final class IslandEngine {
 
     func step(to date: Date) {
         let dt: CGFloat
-        if let last = lastDate { dt = CGFloat(min(0.05, max(0, date.timeIntervalSince(last)))) } else { dt = 0 }
+        if let last = lastDate { dt = CGFloat(min(0.1, max(0, date.timeIntervalSince(last)))) } else { dt = 0 }
         lastDate = date
         t += dt
         if date.timeIntervalSince(skyCheckedAt) > 1 || skyMode != lastSkyMode {
             sky = SkyClock.resolved(mode: skyMode, at: date)
+            season = Season.current(at: date)
             skyCheckedAt = date
             lastSkyMode = skyMode
         }
@@ -428,23 +434,30 @@ final class IslandEngine {
             let p = project(r, c)
             return CGPoint(x: p.x, y: p.y + dy)
         }
+        let pal = theme.palette
+        // Seasonal tint on top of the theme (frosty winters, golden autumns) when seasons are on.
+        let tintTarget: UInt32? = !seasonal ? nil : (season == .winter && theme != .snowy && theme != .volcanic ? 0xEEF4FA
+                                                     : (season == .autumn && theme == .classic ? 0xD9B44A : nil))
+        let tintK: CGFloat = season == .winter ? 0.32 : 0.28
+        func tinted(_ hex: UInt32) -> Color { tintTarget.map { Color(rgb: Color.mixRGB(hex, $0, tintK)) } ?? Color(hex: hex) }
+        let grassA = tinted(pal.grassA), grassA2 = tinted(pal.grassA2), grassB = tinted(pal.grassB), grassB2 = tinted(pal.grassB2)
         let e: CGFloat = 0.6
         let foam: CGFloat = e + 0.25 + 0.1 * sin(t * 1.4)
         ctx.poly([at(-foam, -foam, depth), at(-foam, nn + foam, depth), at(nn + foam, nn + foam, depth), at(nn + foam, -foam, depth)],
                  .white.opacity(Double(0.35 - 0.2 * nt)))
-        ctx.poly([at(-e, -e, depth), at(-e, nn + e, depth), at(nn + e, nn + e, depth), at(nn + e, -e, depth)], Ink.sand)
+        ctx.poly([at(-e, -e, depth), at(-e, nn + e, depth), at(nn + e, nn + e, depth), at(nn + e, -e, depth)], Color(hex: pal.shore))
         let rightV = at(0, nn), bottomV = at(nn, nn), leftV = at(nn, 0)
         let lip = max(3, 4 * s)
-        ctx.poly([leftV, bottomV, P(bottomV.x, bottomV.y + depth), P(leftV.x, leftV.y + depth)], Ink.dirtLeft)
-        ctx.poly([bottomV, rightV, P(rightV.x, rightV.y + depth), P(bottomV.x, bottomV.y + depth)], Ink.dirtRight)
-        ctx.poly([leftV, bottomV, P(bottomV.x, bottomV.y + lip), P(leftV.x, leftV.y + lip)], Ink.lipLeft)
-        ctx.poly([bottomV, rightV, P(rightV.x, rightV.y + lip), P(bottomV.x, bottomV.y + lip)], Ink.lipRight)
+        ctx.poly([leftV, bottomV, P(bottomV.x, bottomV.y + depth), P(leftV.x, leftV.y + depth)], Color(hex: pal.dirtLeft))
+        ctx.poly([bottomV, rightV, P(rightV.x, rightV.y + depth), P(bottomV.x, bottomV.y + depth)], Color(hex: pal.dirtRight))
+        ctx.poly([leftV, bottomV, P(bottomV.x, bottomV.y + lip), P(leftV.x, leftV.y + lip)], tinted(pal.lipLeft))
+        ctx.poly([bottomV, rightV, P(rightV.x, rightV.y + lip), P(bottomV.x, bottomV.y + lip)], tinted(pal.lipRight))
 
         for r in 0..<n {
             for c in 0..<n {
                 let v = (r * 7 + c * 13) % 3
                 let odd = (r + c) % 2 == 1
-                let color: Color = odd ? (v == 0 ? Ink.grassB : Ink.grassB2) : (v == 0 ? Ink.grassA : Ink.grassA2)
+                let color: Color = odd ? (v == 0 ? grassB : grassB2) : (v == 0 ? grassA : grassA2)
                 let rr = CGFloat(r), cc = CGFloat(c)
                 let tile = [at(rr, cc), at(rr, cc + 1), at(rr + 1, cc + 1), at(rr + 1, cc)]
                 ctx.poly(tile, color)
@@ -522,6 +535,9 @@ final class IslandEngine {
             }
         }
 
+        // Seasonal particles
+        if seasonal { drawSeason(ctx, W: W, H: H, nt: nt) }
+
         // Golden-hour wash
         if gt > 0.01 {
             ctx.fill(Path(CGRect(origin: .zero, size: size)), with: .color(Color(hex: 0xFF8C50, opacity: Double(0.16 * gt))))
@@ -561,6 +577,14 @@ final class IslandEngine {
                 light.fill(Path(ellipseIn: CGRect(x: src.0.x - r, y: src.0.y - r, width: r * 2, height: r * 2)),
                            with: .radialGradient(grad, center: src.0, startRadius: 0, endRadius: r))
             }
+            if pal.lavaGlow {
+                var seam = Path()
+                seam.move(to: leftV)
+                seam.addLine(to: bottomV)
+                seam.addLine(to: rightV)
+                let lava = Color(hex: 0xFF6A2B, opacity: Double(0.7 * nt) * (0.8 + 0.2 * Double(sin(t * 2))))
+                light.stroke(seam, with: .color(lava), style: StrokeStyle(lineWidth: max(3, 4 * s), lineCap: .round, lineJoin: .round))
+            }
             for p in props where p.type == .lighthouse {
                 let pt = project(CGFloat(p.row) + 0.5, CGFloat(p.col) + 0.5)
                 let lampPt = P(pt.x, pt.y - 57 * s)
@@ -580,6 +604,51 @@ final class IslandEngine {
         if let text = bubble, t < bubbleUntil {
             let by = mp.y - (lie != nil ? 30 : 44) * s - bob - jumpH
             drawBubble(ctx, text, at: P(mp.x, by))
+        }
+    }
+
+    private func drawSeason(_ ctx: GraphicsContext, W: CGFloat, H: CGFloat, nt: CGFloat) {
+        switch season {
+        case .winter:
+            for f in flakes {
+                let y = (f.y * H + t * (14 + f.r * 10)).truncatingRemainder(dividingBy: H + 10) - 5
+                let x = f.x * W + sin(t * 0.8 + f.ph) * 8
+                ctx.ell(x, y, f.r * 1.4, f.r * 1.4, Color.white.opacity(0.85))
+            }
+        case .spring:
+            for f in flakes.prefix(22) {
+                let y = (f.y * H + t * 12).truncatingRemainder(dividingBy: H + 10) - 5
+                let x = (f.x * W + t * 9 + sin(t + f.ph) * 10).truncatingRemainder(dividingBy: W + 10) - 5
+                var g = ctx
+                g.translateBy(x: x, y: y)
+                g.rotate(by: .radians(Double(t * 1.5 + f.ph)))
+                g.ell(0, 0, 2.4, 1.4, Color(hex: 0xF7B6C8, opacity: 0.9))
+            }
+        case .autumn:
+            let cols: [UInt32] = [0xE8782C, 0xD9541E, 0xF5B83D, 0xB5523B]
+            for (i, f) in flakes.prefix(20).enumerated() {
+                let y = (f.y * H + t * (16 + f.r * 8)).truncatingRemainder(dividingBy: H + 10) - 5
+                let x = f.x * W + sin(t * 1.1 + f.ph) * 14
+                var g = ctx
+                g.translateBy(x: x, y: y)
+                g.rotate(by: .radians(Double(sin(t * 2 + f.ph) * 1.2)))
+                g.ell(0, 0, 3.2, 1.6, Color(hex: cols[i % cols.count], opacity: 0.9))
+                g.line(-3.2, 0, 3.2, 0, Color(hex: 0x6B3A1A, opacity: 0.5), 0.5)
+            }
+        case .summer:
+            guard nt < 0.6 else { return }
+            let n = CGFloat(gridSize)
+            for (i, f) in flakes.prefix(3).enumerated() {
+                let r = (0.5 + 0.5 * sin(t * 0.13 + f.ph)) * n
+                let c = (0.5 + 0.5 * cos(t * 0.11 + f.ph * 1.7)) * n
+                let p = project(r, c)
+                let flap = abs(sin(t * 12 + CGFloat(i)))
+                let y = p.y - 26 * scale + sin(t * 2 + f.ph) * 4
+                let col = [Color(hex: 0xFFC93C), Color(hex: 0x7FD3F0), Color(hex: 0xFF8FB1)][i % 3]
+                ctx.ell(p.x - 2.2 * flap, y, 2.4 * flap + 0.4, 2, col)
+                ctx.ell(p.x + 2.2 * flap, y, 2.4 * flap + 0.4, 2, col)
+                ctx.ell(p.x, y, 0.6, 1.6, Color(hex: 0x3C3F46))
+            }
         }
     }
 

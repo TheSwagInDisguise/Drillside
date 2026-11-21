@@ -124,7 +124,7 @@ struct FlowLayout: Layout {
 
 /// Static rendering of a prop / companion / Bitsy standing on a single tile (shop, inventory, icons).
 struct ThumbView: View {
-    enum Kind { case prop(PropType), companion(CompanionType), mole, land(Int) }
+    enum Kind { case prop(PropType), companion(CompanionType), mole, land(Int), theme(IslandTheme) }
     var kind: Kind
     var dimmed = false
 
@@ -146,27 +146,31 @@ struct ThumbView: View {
                 TileArt.tile(g, 40, 52, halfWidth: 28, depth: 7)
                 MoleArt.draw(g, 40, 58, 1.25, MolePose(t: 1))
             case .land(let n):
-                drawLand(g, n)
+                drawLand(g, n, .classic)
+            case .theme(let t):
+                drawLand(g, 5, t)
+                MoleArt.draw(g, 40, 44, 0.75, MolePose(t: 1))
             }
         }
         .saturation(dimmed ? 0 : 1)
         .opacity(dimmed ? 0.5 : 1)
     }
 
-    private func drawLand(_ g: GraphicsContext, _ n: Int) {
+    private func drawLand(_ g: GraphicsContext, _ n: Int, _ theme: IslandTheme) {
+        let pal = theme.palette
         let hw: CGFloat = min(9, 64 / CGFloat(n))
         let nn = CGFloat(n)
         func pt(_ r: CGFloat, _ c: CGFloat) -> CGPoint {
             P(40 + (c - r) * hw, 40 + (c + r) * hw / 2 - nn * hw / 4)
         }
         let l = pt(nn, 0), b = pt(nn, nn), r = pt(0, nn)
-        g.poly([l, b, P(b.x, b.y + 6), P(l.x, l.y + 6)], Ink.dirtLeft)
-        g.poly([b, r, P(r.x, r.y + 6), P(b.x, b.y + 6)], Ink.dirtRight)
+        g.poly([l, b, P(b.x, b.y + 6), P(l.x, l.y + 6)], Color(hex: pal.dirtLeft))
+        g.poly([b, r, P(r.x, r.y + 6), P(b.x, b.y + 6)], Color(hex: pal.dirtRight))
         for row in 0..<n {
             for col in 0..<n {
                 let rr = CGFloat(row), cc = CGFloat(col)
                 let tile = [pt(rr, cc), pt(rr, cc + 1), pt(rr + 1, cc + 1), pt(rr + 1, cc)]
-                g.poly(tile, (row + col) % 2 == 1 ? Ink.grassB : Ink.grassA)
+                g.poly(tile, (row + col) % 2 == 1 ? Color(hex: pal.grassB) : Color(hex: pal.grassA))
                 g.polyStroke(tile, .white.opacity(0.35), 0.6)
             }
         }

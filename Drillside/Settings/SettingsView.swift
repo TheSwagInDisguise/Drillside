@@ -20,6 +20,7 @@ struct SettingsView: View {
             Form {
                 pillarsSection
                 timerSection
+                soundSection
                 reminderSection
                 Section {
                     Picker("Theme", selection: $profile.theme) {
@@ -33,6 +34,8 @@ struct SettingsView: View {
                         Text("Day").tag("day")
                         Text("Night").tag("night")
                     }
+                    Toggle("Seasonal effects", isOn: $profile.seasonalOn)
+                        .tint(Theme.good)
                 } header: {
                     Text("Appearance")
                 } footer: {
@@ -163,6 +166,41 @@ struct SettingsView: View {
             Text("Focus timer")
         } footer: {
             Text("Running sessions appear as a Live Activity in the Dynamic Island and on the Lock Screen. Live Activities must also be allowed for Drillside in iOS Settings.")
+        }
+    }
+
+    private var soundSection: some View {
+        Section {
+            Picker("Ambient sound", selection: Binding(get: { FocusSound(rawValue: profile.focusSound) ?? .off },
+                                                     set: { profile.focusSound = $0.rawValue })) {
+                ForEach(FocusSound.allCases) { Label($0.title, systemImage: $0.icon).tag($0) }
+            }
+            HStack {
+                Image(systemName: "speaker.fill").foregroundStyle(.secondary)
+                Slider(value: Binding(get: { profile.soundVolume }, set: {
+                    profile.soundVolume = $0
+                    FocusSoundPlayer.shared.setVolume($0)
+                }), in: 0.05...1)
+                Image(systemName: "speaker.wave.3.fill").foregroundStyle(.secondary)
+            }
+            Toggle("Chime between phases", isOn: $profile.chimeOn)
+                .tint(Theme.good)
+            Button {
+                let sound = FocusSound(rawValue: profile.focusSound) ?? .off
+                if sound == .off {
+                    FocusSoundPlayer.shared.chime(volume: profile.soundVolume)
+                } else {
+                    FocusSoundPlayer.shared.play(sound, volume: profile.soundVolume)
+                    Task { @MainActor in
+                        try? await Task.sleep(nanoseconds: 3_000_000_000)
+                        FocusSoundPlayer.shared.stop()
+                    }
+                }
+            } label: { Label("Preview", systemImage: "play.circle") }
+        } header: {
+            Text("Focus sounds")
+        } footer: {
+            Text("Generated on-device and mixed with your music. Ambient sound keeps playing with the screen locked during a session.")
         }
     }
 

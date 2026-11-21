@@ -16,6 +16,15 @@ struct BackupFile: Codable {
         var theme: String, isNight: Bool
         var skyMode: String?
         var liveActivityOn: Bool?
+        var achievements: [String]?
+        var weeklyFocus: String?
+        var reviewWeeks: [String]?
+        var focusSound: String?
+        var soundVolume: Double?
+        var chimeOn: Bool?
+        var seasonalOn: Bool?
+        var islandTheme: String?
+        var ownedThemes: [String]?
     }
     struct HabitDTO: Codable {
         var id: UUID, name: String, pillar: Int, kind: String, focusMinutes: Int
@@ -23,6 +32,10 @@ struct BackupFile: Codable {
         var archived: Bool?
         var archivedAt: Date?
         var pauses: [String]?
+        var unit: String?
+        var target: Int?
+        var amounts: [String]?
+        var notes: [String]?
     }
     struct SessionDTO: Codable {
         var id: UUID, startedAt: Date, dayKey: String, minutes: Int, habitID: UUID?, title: String, completed: Bool
@@ -74,11 +87,15 @@ enum BackupService {
                            pillarNames: p.pillarNames, pillarHints: p.pillarHints,
                            workMinutes: p.workMinutes, breakMinutes: p.breakMinutes, rounds: p.rounds,
                            reminderOn: p.reminderOn, reminderHour: p.reminderHour, reminderMinute: p.reminderMinute,
-                           theme: p.theme, isNight: p.isNight, skyMode: p.skyMode, liveActivityOn: p.liveActivityOn),
+                           theme: p.theme, isNight: p.isNight, skyMode: p.skyMode, liveActivityOn: p.liveActivityOn,
+                           achievements: p.achievements, weeklyFocus: p.weeklyFocus, reviewWeeks: p.reviewWeeks,
+                           focusSound: p.focusSound, soundVolume: p.soundVolume, chimeOn: p.chimeOn, seasonalOn: p.seasonalOn,
+                           islandTheme: p.islandTheme, ownedThemes: p.ownedThemes),
             habits: habits.map { .init(id: $0.id, name: $0.name, pillar: $0.pillar, kind: $0.kindRaw, focusMinutes: $0.focusMinutes,
                                        schedule: $0.scheduleRaw, n: $0.scheduleN, startKey: $0.startKey, sortOrder: $0.sortOrder,
                                        doneKeys: $0.doneKeys.sorted(), createdAt: $0.createdAt,
-                                       archived: $0.archived, archivedAt: $0.archivedAt, pauses: $0.pauses) },
+                                       archived: $0.archived, archivedAt: $0.archivedAt, pauses: $0.pauses,
+                                       unit: $0.unit, target: $0.target, amounts: $0.amounts, notes: $0.notes) },
             sessions: sessions.map { .init(id: $0.id, startedAt: $0.startedAt, dayKey: $0.dayKey, minutes: $0.minutes,
                                            habitID: $0.habitID, title: $0.title, completed: $0.completed) },
             logs: logs.map { .init(dayKey: $0.dayKey, well: $0.well, wrong: $0.wrong, fix: $0.fix, tag: $0.tag, updatedAt: $0.updatedAt) },
@@ -106,6 +123,15 @@ enum BackupService {
         p.theme = d.theme; p.isNight = d.isNight
         p.skyMode = d.skyMode ?? "auto"
         p.liveActivityOn = d.liveActivityOn ?? true
+        p.achievements = d.achievements ?? []
+        p.weeklyFocus = d.weeklyFocus ?? ""
+        p.reviewWeeks = d.reviewWeeks ?? []
+        p.focusSound = d.focusSound ?? "off"
+        p.soundVolume = d.soundVolume ?? 0.6
+        p.chimeOn = d.chimeOn ?? true
+        p.seasonalOn = d.seasonalOn ?? true
+        p.ownedThemes = d.ownedThemes ?? ["classic"]
+        p.islandTheme = d.islandTheme.flatMap { IslandTheme(rawValue: $0) }.map(\.rawValue) ?? "classic"
         context.insert(p)
 
         for h in file.habits {
@@ -118,6 +144,10 @@ enum BackupService {
             habit.archived = h.archived ?? false
             habit.archivedAt = h.archivedAt
             habit.pauses = h.pauses ?? []
+            habit.unit = h.unit ?? ""
+            habit.target = h.target ?? 0
+            habit.amounts = h.amounts ?? []
+            habit.notes = h.notes ?? []
             context.insert(habit)
         }
         for s in file.sessions {

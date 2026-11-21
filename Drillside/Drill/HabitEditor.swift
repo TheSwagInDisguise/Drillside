@@ -16,6 +16,8 @@ struct HabitEditor: View {
     @State private var schedule: ScheduleKind = .daily
     @State private var n = 3
     @State private var confirmDelete = false
+    @State private var unit = ""
+    @State private var target = 0
     @FocusState private var nameFocused: Bool
 
     var body: some View {
@@ -49,6 +51,18 @@ struct HabitEditor: View {
                     if kind == .focus {
                         StepperRow(title: "Block length", value: minutes, unit: "min", range: 5...180, step: 5) { minutes = $0 }
                     }
+                }
+                Section {
+                    TextField("Unit, e.g. pages, km, glasses (optional)", text: $unit)
+                        .textInputAutocapitalization(.never)
+                    if !unit.trimmingCharacters(in: .whitespaces).isEmpty {
+                        StepperRow(title: "Daily target", value: target, unit: unit, range: 0...10000,
+                                   step: target >= 100 ? 10 : (target >= 20 ? 5 : 1)) { target = $0 }
+                    }
+                } header: {
+                    Text("Track an amount")
+                } footer: {
+                    Text("With a unit, checking the habit off asks how much you did (e.g. 32 pages), and the Log shows weekly totals.")
                 }
                 Section {
                     Picker("Schedule", selection: $schedule) {
@@ -126,6 +140,8 @@ struct HabitEditor: View {
         minutes = h.focusMinutes
         schedule = h.schedule
         n = h.schedule == .daily ? 3 : h.scheduleN
+        unit = h.unit
+        target = h.target
     }
 
     private func save() {
@@ -141,10 +157,15 @@ struct HabitEditor: View {
             if schedule == .every && (h.schedule != .every || h.scheduleN != count) { h.startKey = Day.today }
             h.schedule = schedule
             h.scheduleN = count
+            h.unit = unit.trimmingCharacters(in: .whitespaces)
+            h.target = h.unit.isEmpty ? 0 : target
             toasts.show("Saved")
         } else {
-            context.insert(Habit(name: trimmed, pillar: pillar, kind: kind, focusMinutes: minutes, schedule: schedule, n: count,
-                                 startKey: schedule == .every ? Day.today : Day.add(Day.today, -Day.retroWindow), sortOrder: Game.nextSortOrder(pillar: pillar, habits: habits)))
+            let created = Habit(name: trimmed, pillar: pillar, kind: kind, focusMinutes: minutes, schedule: schedule, n: count,
+                                startKey: schedule == .every ? Day.today : Day.add(Day.today, -Day.retroWindow), sortOrder: Game.nextSortOrder(pillar: pillar, habits: habits))
+            created.unit = unit.trimmingCharacters(in: .whitespaces)
+            created.target = created.unit.isEmpty ? 0 : target
+            context.insert(created)
             toasts.show("Added to \(profile.pillarName(pillar))")
         }
         try? context.save()

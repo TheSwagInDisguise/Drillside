@@ -28,6 +28,27 @@ enum Game {
         return Outcome(levelsGained: lv)
     }
 
+    /// Records an amount and/or note for a day and marks the habit done (amount 0 with no note = undo).
+    @discardableResult
+    static func checkIn(_ habit: Habit, day: String, amount: Int?, note: String?, profile: Profile) -> Outcome {
+        guard Day.canEdit(day) else {
+            return Outcome(message: "Check-offs are limited to \(Day.retroWindow) days back", ok: false)
+        }
+        habit.setAmount(amount.flatMap { $0 > 0 ? $0 : nil }, on: day)
+        habit.setNote(note, on: day)
+        if habit.isDone(day) { return Outcome() }
+        habit.setDone(true, on: day)
+        let lv = profile.award(xp: Economy.habitXP, shells: Economy.habitShells)
+        return Outcome(levelsGained: lv)
+    }
+
+    static func uncheck(_ habit: Habit, day: String, profile: Profile) {
+        guard Day.canEdit(day), habit.isDone(day) else { return }
+        habit.setDone(false, on: day)
+        habit.setAmount(nil, on: day)
+        profile.award(xp: -Economy.habitXP, shells: -Economy.habitShells)
+    }
+
     static func nextSortOrder(pillar: Int, habits: [Habit]) -> Int {
         let inPillar = habits.filter { $0.pillar == pillar }
         return pillar * 1000 + (inPillar.map { $0.sortOrder % 1000 }.max() ?? -1) + 1
@@ -122,6 +143,19 @@ enum Game {
         profile.shells -= type.price
         profile.companions.append(type.rawValue)
         return Outcome(message: "\(type.name) moved onto your island!")
+    }
+
+    /// Buys (if needed) and switches to an island theme.
+    static func chooseTheme(_ theme: IslandTheme, profile: Profile) -> Outcome {
+        let owned = theme == .classic || profile.ownedThemes.contains(theme.rawValue)
+        if !owned {
+            guard profile.level >= theme.unlockLevel else { return Outcome(message: "Unlocks at level \(theme.unlockLevel)", ok: false) }
+            guard profile.shells >= theme.price else { return Outcome(message: "Need 🐚 \(theme.price - profile.shells) more", ok: false) }
+            profile.shells -= theme.price
+            profile.ownedThemes.append(theme.rawValue)
+        }
+        profile.islandTheme = theme.rawValue
+        return Outcome(message: owned ? "🎨 \(theme.name) applied" : "🎨 \(theme.name) unlocked and applied")
     }
 
     static func expandIsland(profile: Profile) -> Outcome {

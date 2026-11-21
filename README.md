@@ -20,6 +20,14 @@ A cozy, gamified habit & focus app for iPhone. Build daily momentum with the **D
   - **Edit Mode:** drag props around, or place items from inventory.
   - **Reset Layout:** refund your shells, or return everything to inventory.
 - **Settings:** pillar names, timer defaults, a local daily reminder, theme, and **JSON export/import** backups.
+- **Extras:**
+  - Habits can track amounts ("Read 20 pages" → log 32) and take per-day notes. The Log shows weekly and 30-day totals.
+  - A **weekly review** collects wins, friction, pillar balance and one focus for next week, which is shown on DRILL.
+  - **Focus sounds** (rain, waves, campfire, brown noise) are generated on the device, and a chime plays between phases.
+  - 17 **achievements**. Some award exclusive trophy props you can't buy.
+  - **Seasonal effects:** snow, petals, butterflies, falling leaves. Five buyable **island themes**.
+  - A **launcher widget** for the home screen and Lock Screen opens `drillside://` deep links. It needs no App Group, so still no entitlements.
+  - The island animates at 30 fps, or 15 fps in Low Power Mode.
 - **Safety nets:**
   - A focus session survives iOS closing the app. It resumes on the next launch, or pays out if it finished in the meantime.
   - **Automatic weekly backups**, plus one after every app update, go to *Files › On My iPhone › Drillside › Backups*. The newest 8 are kept, and you can restore them from Settings.

@@ -48,6 +48,10 @@ enum SkyClock {
                                            "America/Sao_Paulo", "America/Montevideo", "America/Asuncion", "Africa/Johannesburg",
                                            "Africa/Maputo", "Africa/Windhoek", "Indian/Mauritius", "Antarctica/"]
 
+    static func isSouthern(_ timeZone: TimeZone) -> Bool {
+        southernPrefixes.contains { timeZone.identifier.hasPrefix($0) }
+    }
+
     static func sunTimes(for date: Date, calendar: Calendar = .current, timeZone: TimeZone = .current) -> (sunrise: Double, sunset: Double) {
         let doy = Double(calendar.ordinality(of: .day, in: .year, for: date) ?? 172)
         let southern = southernPrefixes.contains { timeZone.identifier.hasPrefix($0) }

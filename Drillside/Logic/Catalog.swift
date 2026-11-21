@@ -10,8 +10,10 @@ struct LightSource {
 }
 
 enum PropCategory: String, CaseIterable, Identifiable {
-    case nature, cozy, landmarks, study, lights, terrain
+    case nature, cozy, landmarks, study, lights, terrain, trophies
     var id: String { rawValue }
+    /// Categories sold in the shop (trophies are earned through achievements only).
+    static var shop: [PropCategory] { allCases.filter { $0 != .trophies } }
     var title: String {
         switch self {
         case .nature: return "Nature"
@@ -20,6 +22,7 @@ enum PropCategory: String, CaseIterable, Identifiable {
         case .study: return "Study"
         case .lights: return "Lights"
         case .terrain: return "Terrain"
+        case .trophies: return "Trophies"
         }
     }
     var icon: String {
@@ -30,6 +33,7 @@ enum PropCategory: String, CaseIterable, Identifiable {
         case .study: return "book.fill"
         case .lights: return "lightbulb.fill"
         case .terrain: return "square.grid.3x3.fill"
+        case .trophies: return "trophy.fill"
         }
     }
 }
@@ -52,6 +56,8 @@ enum PropType: String, CaseIterable, Codable, Identifiable {
     // Terrain (flat)
     case sand, path, meadow, deck, pond
     case cobble, snow, mosaic
+    // Trophies (achievement rewards, not for sale)
+    case pennant, bell, obelisk, rainbow
 
     var id: String { rawValue }
 
@@ -128,6 +134,10 @@ enum PropType: String, CaseIterable, Codable, Identifiable {
         case .cobble: return Info(name: "Cobblestones", short: "Cobble", price: 18, level: 4, category: .terrain, blurb: "Walkable · old-town charm", action: "👣 strolling", tall: 8)
         case .snow: return Info(name: "Snow Patch", short: "Snow", price: 15, level: 6, category: .terrain, blurb: "Walkable · always winter", action: "❄️ snow angels", tall: 8)
         case .mosaic: return Info(name: "Mosaic Tiles", short: "Mosaic", price: 45, level: 9, category: .terrain, blurb: "Walkable · colourful", action: "🎨 hopscotch", tall: 8)
+        case .pennant: return Info(name: "Streak Pennant", short: "Pennant", price: 0, level: 1, category: .trophies, blurb: "Earned: a 7-day streak", action: "🚩 waving the flag", tall: 40)
+        case .bell: return Info(name: "Check-in Bell", short: "Bell", price: 0, level: 1, category: .trophies, blurb: "Earned: 30-day log streak", action: "🔔 ringing in the day", tall: 40)
+        case .obelisk: return Info(name: "Focus Obelisk", short: "Obelisk", price: 0, level: 1, category: .trophies, blurb: "Earned: 100 focus hours", action: "💎 humming along", tall: 50)
+        case .rainbow: return Info(name: "Rainbow Arch", short: "Rainbow", price: 0, level: 1, category: .trophies, blurb: "Earned: reach level 10", action: "🌈 over the rainbow", tall: 44)
         case .sand: return Info(name: "Sand Patch", short: "Sand", price: 8, level: 1, category: .terrain, blurb: "Walkable · beachy", action: "🐚 shell hunting", tall: 8)
         case .path: return Info(name: "Stone Path", short: "Path", price: 10, level: 1, category: .terrain, blurb: "Walkable · Bitsy’s favourite", action: "👣 strolling", tall: 8)
         case .meadow: return Info(name: "Clover Meadow", short: "Meadow", price: 12, level: 2, category: .terrain, blurb: "Walkable · maybe lucky", action: "🍀 lucky clover", tall: 8)
@@ -169,6 +179,8 @@ enum PropType: String, CaseIterable, Codable, Identifiable {
         case .desk: return LightSource(r: 255, g: 220, b: 160, radius: 40, dx: -6, dy: -18)
         case .balloon: return LightSource(r: 255, g: 150, b: 60, radius: 40, dy: -36, flickers: true)
         case .fountain: return LightSource(r: 140, g: 210, b: 255, radius: 46, dy: -14)
+        case .obelisk: return LightSource(r: 120, g: 230, b: 255, radius: 70, dy: -30)
+        case .bell: return LightSource(r: 255, g: 210, b: 130, radius: 40, dy: -30)
         case .streetlamp: return LightSource(r: 255, g: 230, b: 150, radius: 88, dx: 9, dy: -34)
         case .fireflies: return LightSource(r: 220, g: 255, b: 120, radius: 44, dy: -8)
         case .cabin: return LightSource(r: 255, g: 200, b: 110, radius: 60, dx: -11, dy: -10)
@@ -176,6 +188,8 @@ enum PropType: String, CaseIterable, Codable, Identifiable {
         default: return nil
         }
     }
+
+    var isExclusive: Bool { category == .trophies }
 
     static func items(in category: PropCategory) -> [PropType] {
         allCases.filter { $0.category == category }.sorted { ($0.unlockLevel, $0.price) < ($1.unlockLevel, $1.price) }
@@ -259,4 +273,94 @@ enum CompanionType: String, CaseIterable, Codable, Identifiable {
     }
 
     var hops: Bool { self == .frog || self == .bunny }
+}
+
+/// Ground styles for the whole island. Classic is free; others are bought with shells.
+enum IslandTheme: String, CaseIterable, Identifiable {
+    case classic, atoll, autumn, snowy, volcanic
+
+    var id: String { rawValue }
+
+    var name: String {
+        switch self {
+        case .classic: return "Classic Meadow"
+        case .atoll: return "Sandy Atoll"
+        case .autumn: return "Autumn Glade"
+        case .snowy: return "Snowy Isle"
+        case .volcanic: return "Volcanic Rock"
+        }
+    }
+
+    var blurb: String {
+        switch self {
+        case .classic: return "Soft green grass"
+        case .atoll: return "Sun-bleached sand and dune grass"
+        case .autumn: return "Golden grass all year round"
+        case .snowy: return "Fresh snow with icy cliffs"
+        case .volcanic: return "Dark basalt with glowing lava seams"
+        }
+    }
+
+    var price: Int {
+        switch self {
+        case .classic: return 0
+        case .atoll: return 400
+        case .autumn: return 600
+        case .snowy: return 800
+        case .volcanic: return 1200
+        }
+    }
+
+    var unlockLevel: Int {
+        switch self {
+        case .classic: return 1
+        case .atoll: return 4
+        case .autumn: return 6
+        case .snowy: return 8
+        case .volcanic: return 11
+        }
+    }
+
+    struct Palette {
+        var grassA: UInt32, grassA2: UInt32, grassB: UInt32, grassB2: UInt32
+        var dirtLeft: UInt32, dirtRight: UInt32, lipLeft: UInt32, lipRight: UInt32
+        var shore: UInt32
+        var lavaGlow = false
+    }
+
+    var palette: Palette {
+        switch self {
+        case .classic:
+            return Palette(grassA: 0x8DD26E, grassA2: 0x8FD470, grassB: 0x83C964, grassB2: 0x86CC66,
+                           dirtLeft: 0xB8875A, dirtRight: 0x9C6F45, lipLeft: 0x4E9A43, lipRight: 0x438A3A, shore: 0xF1DCA0)
+        case .atoll:
+            return Palette(grassA: 0xEBD9A6, grassA2: 0xE6D39C, grassB: 0xDFCB90, grassB2: 0xE2CF96,
+                           dirtLeft: 0xD9B77E, dirtRight: 0xC29E66, lipLeft: 0x9CC56A, lipRight: 0x8AB55C, shore: 0xF7EBC8)
+        case .autumn:
+            return Palette(grassA: 0xD9B44A, grassA2: 0xDDB950, grassB: 0xCFA640, grassB2: 0xD3AB45,
+                           dirtLeft: 0xA8744A, dirtRight: 0x8E6038, lipLeft: 0xB5852E, lipRight: 0x9E7226, shore: 0xEED39A)
+        case .snowy:
+            return Palette(grassA: 0xF2F7FB, grassA2: 0xEEF4FA, grassB: 0xE4EDF6, grassB2: 0xE8F0F8,
+                           dirtLeft: 0x9FB6CC, dirtRight: 0x8199B2, lipLeft: 0xDCE8F3, lipRight: 0xC9DAEA, shore: 0xE9EEF2)
+        case .volcanic:
+            return Palette(grassA: 0x4A4550, grassA2: 0x4E4954, grassB: 0x423D48, grassB2: 0x46414C,
+                           dirtLeft: 0x2F2A33, dirtRight: 0x25212A, lipLeft: 0xE0552B, lipRight: 0xC8461F, shore: 0x3A3540, lavaGlow: true)
+        }
+    }
+}
+
+enum Season: String {
+    case spring, summer, autumn, winter
+
+    static func current(at date: Date = Date(), timeZone: TimeZone = .current, calendar: Calendar = .current) -> Season {
+        let month = calendar.component(.month, from: date)
+        let southern = SkyClock.isSouthern(timeZone)
+        let m = southern ? ((month + 5) % 12) + 1 : month
+        switch m {
+        case 3, 4, 5: return .spring
+        case 6, 7, 8: return .summer
+        case 9, 10, 11: return .autumn
+        default: return .winter
+        }
+    }
 }

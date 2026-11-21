@@ -78,13 +78,17 @@ struct IslandView: View {
 
     private func canvas(safeTop: CGFloat) -> some View {
         let active = router.tab == .island && router.timer == nil && scenePhase == .active
-        return TimelineView(.animation(minimumInterval: nil, paused: !active)) { tl in
+        // 30 fps is plenty for a cozy scene (15 fps in Low Power Mode); this is not a game.
+        let interval: Double = ProcessInfo.processInfo.isLowPowerModeEnabled ? 1.0 / 15 : 1.0 / 30
+        return TimelineView(.animation(minimumInterval: interval, paused: !active)) { tl in
             Canvas { ctx, size in
                 let e = engine
                 e.gridSize = profile.islandSize
                 e.props = placed.map { PropSnapshot(id: $0.id, type: $0.type, row: $0.row, col: $0.col) }
                 e.companions = profile.ownedCompanions
                 e.skyMode = skyMode
+                e.theme = IslandTheme(rawValue: profile.islandTheme) ?? .classic
+                e.seasonal = profile.seasonalOn
                 e.editing = editing
                 e.placing = placing
                 e.selected = selected

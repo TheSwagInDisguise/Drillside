@@ -8,12 +8,14 @@ struct ShopView: View {
     @Query private var placed: [PlacedProp]
 
     enum Tab: Hashable, Identifiable {
-        case props(PropCategory), companions, land
+        case props(PropCategory), companions, land, themes, awards
         var id: String {
             switch self {
             case .props(let c): return c.rawValue
             case .companions: return "companions"
             case .land: return "land"
+            case .themes: return "themes"
+            case .awards: return "awards"
             }
         }
         var title: String {
@@ -21,6 +23,8 @@ struct ShopView: View {
             case .props(let c): return c.title
             case .companions: return "Companions"
             case .land: return "Land"
+            case .themes: return "Themes"
+            case .awards: return "Awards"
             }
         }
         var icon: String {
@@ -28,9 +32,11 @@ struct ShopView: View {
             case .props(let c): return c.icon
             case .companions: return "pawprint.fill"
             case .land: return "map.fill"
+            case .themes: return "paintpalette.fill"
+            case .awards: return "trophy.fill"
             }
         }
-        static var all: [Tab] { PropCategory.allCases.map { Tab.props($0) } + [.companions, .land] }
+        static var all: [Tab] { PropCategory.shop.map { Tab.props($0) } + [.companions, .land, .themes, .awards] }
     }
     @State private var tab: Tab = .props(.nature)
     @State private var buyTick = 0
@@ -57,6 +63,12 @@ struct ShopView: View {
                         }
                     case .land:
                         landCard
+                    case .themes:
+                        LazyVGrid(columns: columns, spacing: 10) {
+                            ForEach(IslandTheme.allCases) { themeCard($0) }
+                        }
+                    case .awards:
+                        AwardsList(profile: profile)
                     }
 
                     Text("Earn shells by focusing (1 per minute), checking habits and logging.")
@@ -121,8 +133,10 @@ struct ShopView: View {
             return PropType.items(in: c).filter { $0.unlockLevel == profile.level && profile.level > 1 && owned($0) == 0 }.count
         case .companions:
             return CompanionType.allCases.filter { $0.unlockLevel == profile.level && !profile.companions.contains($0.rawValue) }.count
-        case .land:
+        case .land, .awards:
             return 0
+        case .themes:
+            return IslandTheme.allCases.filter { $0.unlockLevel == profile.level && !profile.ownedThemes.contains($0.rawValue) }.count
         }
     }
 
@@ -235,6 +249,26 @@ struct ShopView: View {
             if out.ok {
                 buyTick += 1
                 toasts.show(out.message ?? "", actionTitle: "Visit", duration: 4) { router.tab = .island }
+            } else {
+                failTick += 1
+                if let m = out.message { toasts.show(m) }
+            }
+        }
+    }
+
+    private func themeCard(_ t: IslandTheme) -> some View {
+        let owned = profile.ownedThemes.contains(t.rawValue) || t == .classic
+        let active = profile.islandTheme == t.rawValue
+        let locked = !owned && profile.level < t.unlockLevel
+        let label = active ? "✓ In use" : (owned ? "Use" : (locked ? "Level \(t.unlockLevel)" : "🐚 \(t.price)"))
+        return itemCard(thumb: ThumbView(kind: .theme(t), dimmed: locked), title: t.name,
+                        subtitle: locked ? "Unlocks at level \(t.unlockLevel)" : t.blurb,
+                        button: label, enabled: !active && !locked, locked: locked,
+                        isNew: !owned && !locked && t.unlockLevel == profile.level) {
+            let out = Game.chooseTheme(t, profile: profile)
+            if out.ok {
+                buyTick += 1
+                toasts.show(out.message ?? "", actionTitle: "See it", duration: 4) { router.tab = .island }
             } else {
                 failTick += 1
                 if let m = out.message { toasts.show(m) }

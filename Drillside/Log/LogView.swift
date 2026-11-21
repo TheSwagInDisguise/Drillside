@@ -19,6 +19,7 @@ struct LogView: View {
     @State private var fix = ""
     @State private var editingToday = false
     @State private var savedTick = 0
+    @State private var showReview = false
     @FocusState private var focused: Field?
 
     enum Field { case well, wrong, fix }
@@ -30,6 +31,22 @@ struct LogView: View {
         NavigationStack {
             ScrollView {
                 VStack(spacing: 14) {
+                    if !profile.reviewWeeks.contains(WeeklyReview.weekStart()) {
+                        Button { showReview = true } label: {
+                            HStack(spacing: 10) {
+                                Text("🧭").font(.system(size: 26))
+                                VStack(alignment: .leading, spacing: 1) {
+                                    Text("Your weekly review is ready").font(.system(size: 15, weight: .heavy, design: .rounded))
+                                    Text("2 minutes · +\(WeeklyReview.xp) XP · +\(WeeklyReview.shells) 🐚").font(.system(size: 12)).foregroundStyle(.secondary)
+                                }
+                                Spacer()
+                                Image(systemName: "chevron.right").foregroundStyle(.secondary)
+                            }
+                            .padding(12)
+                            .background(Theme.accent.opacity(0.14), in: RoundedRectangle(cornerRadius: 16))
+                        }
+                        .buttonStyle(.plain)
+                    }
                     if todayEntry == nil || editingToday { checkInForm } else { checkInSummary }
 
                     Picker("View", selection: $mode) {
@@ -51,6 +68,9 @@ struct LogView: View {
             .scrollDismissesKeyboard(.interactively)
             .navigationTitle("Log")
             .toolbar {
+                ToolbarItem(placement: .topBarLeading) {
+                    Button { showReview = true } label: { Label("Weekly review", systemImage: "calendar.badge.checkmark") }
+                }
                 ToolbarItem(placement: .topBarTrailing) {
                     Chip(text: "🔥 \(logStreak)-day streak")
                 }
@@ -60,6 +80,9 @@ struct LogView: View {
                 }
             }
             .sensoryFeedback(.success, trigger: savedTick)
+            .sheet(isPresented: $showReview) {
+                WeeklyReviewView(profile: profile, habits: habits, sessions: sessions, logs: logs)
+            }
         }
     }
 
@@ -336,6 +359,11 @@ private struct HeatmapView: View {
                 Text("**\(Day.long(k))** · \(Int((Stats.dayRatio(rules, k) * 100).rounded()))% habits · \(focusByDay[k] ?? 0)m focus")
                 Text(done.isEmpty ? "No habits checked" : "✓ " + done.prefix(4).joined(separator: ", ") + (done.count > 4 ? " +\(done.count - 4)" : ""))
                     .foregroundStyle(.secondary)
+                ForEach(habits.filter { $0.amount(on: k) != nil || $0.note(on: k) != nil }) { h in
+                    let amount = h.amount(on: k).map { " · \($0) \(h.unit)" } ?? ""
+                    let note = h.note(on: k).map { " · “\($0)”" } ?? ""
+                    Text("\(h.name)\(amount)\(note)").foregroundStyle(.secondary)
+                }
                 if let e = logs.first(where: { $0.dayKey == k }) {
                     if !e.well.isEmpty { Text("✅ \(e.well)") }
                     if !e.wrong.isEmpty { Text("⚠️ \(e.wrong)") }
@@ -463,6 +491,27 @@ private struct TrendsView: View {
                         }
                     }
                     .frame(height: 140)
+                }
+            }
+
+            let amountHabits = habits.filter(\.tracksAmount)
+            if !amountHabits.isEmpty {
+                Card {
+                    VStack(alignment: .leading, spacing: 8) {
+                        header("Totals", "this week · last 30 days")
+                        ForEach(amountHabits) { h in
+                            let week = h.total(days: Day.weekdayIndexMondayFirst(today) + 1, endingAt: today)
+                            let month = h.total(days: 30, endingAt: today)
+                            HStack {
+                                Circle().fill(Pillars.color(h.pillar)).frame(width: 10, height: 10)
+                                Text(h.name).font(.system(size: 14, weight: .bold, design: .rounded)).lineLimit(1)
+                                Spacer()
+                                Text("\(week) / \(month) \(h.unit)").font(.system(size: 13, weight: .heavy, design: .rounded)).monospacedDigit()
+                            }
+                        }
+                        Text("Averages \(amountHabits.map { "\($0.name): \(String(format: "%.1f", Double($0.total(days: 30, endingAt: today)) / 30))/day" }.joined(separator: " · "))")
+                            .font(.system(size: 11.5)).foregroundStyle(.secondary)
+                    }
                 }
             }
 
